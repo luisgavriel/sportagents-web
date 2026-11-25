@@ -81,7 +81,7 @@ function renderPlanEnd(){
     :`<div class="row" style="justify-content:space-between"><h3>El plan terminó el ${fmtD(last)}</h3><span class="pill bad">Sin plan</span></div><div class="sub">Pídele a Claude el siguiente bloque con algo como «revisemos el plan».</div>`;
 }
 // ---- Vista semanal (lunes a domingo de la semana del día elegido)
-const SPORT_OF=a=>/strength|fuerza/i.test(a)?"strength":/run|carrera|trail/i.test(a)?"run":/cycl|bike|ride|bici|virtual/i.test(a)?"bike":a;
+const SPORT_OF=a=>/strength|fuerza/i.test(a)?"strength":/run|carrera|trail/i.test(a)?"run":/cycl|bik|ride|bici|virtual/i.test(a)?"bike":a;
 function renderWeek(){
   const sel=$("daySel").value, d0=new Date(sel+"T12:00:00"); d0.setDate(d0.getDate()-((d0.getDay()+6)%7));
   const t=todayISO(); let plan=0,done=0,nDone=0,nPlan=0,rows="";
@@ -99,7 +99,7 @@ function renderWeek(){
       const cls={ok:"ok",todo:"neutral",today:"neutral",miss:"bad",unk:"warn"}[st];
       return `<div class="row" style="justify-content:space-between;gap:8px"><span>${s.name} <span class="sub">· ${s.min}′</span></span><span class="pill ${cls}">${lab}</span></div>`;
     }).join("");
-    const extra=acts.filter(a=>!a.used).map(a=>`<div class="row" style="justify-content:space-between"><span class="sub">Extra: ${esc(a.sport)} · ${a.duration_min||"?"}′</span><span class="pill ok">Hecha</span></div>`).join("");
+    const extra=acts.filter(a=>!a.used).map(a=>`<div class="row" style="justify-content:space-between"><span class="sub">Extra: ${esc(SPORT[a.s]||a.name||a.sport)} · ${a.duration_min||"?"}′</span><span class="pill ok">Hecha</span></div>`).join("");
     if(!items&&!extra)continue;
     rows+=`<div style="display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)"><div class="eyebrow">${fmtD(iso)}</div>${items}${extra}</div>`;
   }
@@ -107,7 +107,7 @@ function renderWeek(){
   $("weekCard").innerHTML=`<div class="row" style="justify-content:space-between"><h2>Semana</h2><span class="sub">${nDone}/${nPlan} sesiones · ${h(done)} de ${h(plan)}</span></div>
    <div class="bar" role="img" aria-label="Horas hechas frente a planificadas"><span style="width:${plan?Math.min(100,done/plan*100):0}%"></span></div>
    ${rows||'<div class="sub">Sin sesiones planificadas esta semana.</div>'}
-   ${ACT_OK?"":'<div class="sub">Bici y carrera aún no se comprueban: falta guardar tus actividades de Garmin.</div>'}`;
+   ${ACT_OK?"":'<div class="sub">Bici y carrera aún no se comprueban: no se han podido leer tus actividades de Garmin.</div>'}`;
 }
 
 // ---- Gráficos SVG
@@ -279,7 +279,7 @@ async function loadData(){
   R=rep.data;
   SD={};str.data.forEach(r=>{SD[r.session_date]=(SD[r.session_date]||0)+(r.duration_min||0)});
   A={};ACT_OK=false;
-  try{const act=await sb.from("v_activities").select("activity_date,sport,duration_min");
+  try{const act=await sb.from("v_activities").select("activity_date,sport,name,duration_min");
     if(!act.error){ACT_OK=true;act.data.forEach(a=>(A[a.activity_date]=A[a.activity_date]||[]).push(a))}}catch(e){}
   H={};str.data.forEach(r=>(r.exercises||[]).forEach(e=>{if(e.name&&e.load_kg!=null)H[e.name]={date:r.session_date,load_kg:+e.load_kg,reps_done:e.reps_done,top:!!e.top}}));
   if(ftp.data.length)FTP=ftp.data.at(-1).ftp_watts;
