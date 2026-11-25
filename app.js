@@ -210,13 +210,13 @@ function generate(){
       html+=`<div class="ex"><span class="tag">${tag}${j+1}</span><div><div class="name">${ex?ex[0]:"Sin material para este patrón"}</div><div class="sub">${sets} × ${isCore?"30–40 s":p==="unilateral"?"8–10 por lado":reps}${ex&&!isCore?(state.place==="casa"?" · si completas todo al tope, la próxima vez más lento o variante más difícil":" · si completas todo al tope, +2,5 kg la próxima vez"):""}</div></div>${opts.length>1?`<button class="swap" data-k="${key}">Cambiar</button>`:"<span></span>"}${ex?logRow(i,ex[0],isCore,deload):""}</div>`;
     });
   });
-  html+=`<div class="sub" style="border-top:1px solid var(--line);padding-top:10px">Vuelta a la calma 3′.</div><div class="row"><button class="btn" id="saveBtn">Guardar como hecha</button><span class="sub" id="saveNote">Apunta los kilos y las repeticiones de la última serie de cada ejercicio.</span></div>`;
+  html+=`<div class="sub" style="border-top:1px solid var(--line);padding-top:10px">Vuelta a la calma 3′.</div><div class="row"><button class="btn" id="garminBtn" style="background:var(--surface);color:var(--accent);border:1px solid var(--accent)">Enviar a Garmin</button><span class="sub" id="garminNote">Sube este entreno al reloj para el día elegido.</span></div><div class="row"><button class="btn" id="saveBtn">Guardar como hecha</button><span class="sub" id="saveNote">Apunta los kilos y las repeticiones de la última serie de cada ejercicio.</span></div>`;
   state.current=blocks.flatMap(([tag,pats])=>pats.map((p,j)=>{const o=options(p);const ex=o[state.pick[tag+p]%Math.max(1,o.length)];return {tag:tag+(j+1),pattern:p,name:ex?ex[0]:null,sets,reps:p==="core"?"30–40 s":p==="unilateral"?"8–10 por lado":reps}}));
   state.sets=sets;
   $("workout").innerHTML=html;
   $("workout").querySelectorAll(".swap").forEach(b=>b.onclick=()=>{state.pick[b.dataset.k]++;generate()});
   $("genNote").textContent=rec.lvl==="bad"?"Recuperación baja: una serie menos.":"";
-  $("saveBtn").onclick=saveSession; lastSaved=null;
+  $("saveBtn").onclick=saveSession; $("garminBtn").onclick=sendToGarmin; lastSaved=null;
 }
 [["placeSeg","p","place"],["durSeg","d","dur"],["typeSeg","t","type"]].forEach(([id,k,f])=>$(id).querySelectorAll("button").forEach(b=>b.onclick=()=>{state[f]=f==="dur"?+b.dataset[k]:b.dataset[k];state.pick={};syncSeg();generate()}));
 $("genBtn").onclick=()=>{state.seed++;state.pick={};generate()};
@@ -335,6 +335,22 @@ async function saveSession(){
   SD[d]=state.dur;renderWeek();
   exercises.forEach(e=>{if(e.name&&e.load_kg!=null)H[e.name]={date:d,load_kg:e.load_kg,reps_done:e.reps_done,top:e.top}});
   $("saveNote").textContent="Guardada como hecha. Si corriges algo, vuelve a pulsar y se actualiza.";
+}
+
+// Manda la fuerza generada a Garmin: se guarda en web.garmin_strength y se avisa al programa de Garmin.
+async function sendToGarmin(){
+  const d=$("daySel").value;
+  const exercises=state.current.filter(e=>e.name).map((e,i)=>{const v=$("kg-"+state.current.indexOf(e))?.value;const sug=suggest(e.name,state.type==="descarga");
+    return {tag:e.tag,name:e.name,reps:e.reps,load_kg:v!==""&&v!=null?+v:(sug?sug.kg:null)}});
+  const row={session_date:d,place:state.place,duration_min:state.dur,sets:state.sets,rest_s:state.dur===25?60:90,exercises,requested_at:new Date().toISOString()};
+  $("garminNote").textContent="Enviando…";
+  const {error}=await sb.from("garmin_strength").upsert(row);
+  if(error){$("garminNote").textContent="No se pudo guardar: "+error.message;return}
+  let msg="Guardada, pero el envío inmediato aún no está activado: solo se subirá en la sincronización del domingo si el día no ha pasado.";
+  try{const {data}=await sb.functions.invoke("garmin-dispatch",{method:"POST"});
+    if(data?.dispatched)msg=`Enviada: en 2–3 minutos estará en Garmin para el ${fmtD(d)}. Sincroniza el reloj.`;
+    else if(data&&!data.ok)msg="Guardada, pero no se pudo avisar a Garmin ahora."}catch(e){}
+  $("garminNote").textContent=msg+" Si la vuelves a enviar, sustituye a la de ese día.";
 }
 
 // ---- Arranque
