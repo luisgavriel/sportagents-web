@@ -6,6 +6,10 @@
 <meta name="theme-color" content="#0b6e8a">
 <title>SportAgents Entreno</title>
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Entreno">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="style.css">
@@ -62,10 +66,15 @@
       <div class="card"><h3>Horas de sueño</h3><div class="chart" id="chSleep"></div></div>
     </div>
     <div class="card">
+      <h3>VO2 máx (Garmin)</h3>
+      <div class="chart" id="chVo2"></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Bici</span><span><i style="background:var(--muted)"></i>Carrera</span></div>
+    </div>
+    <div class="card">
       <div class="row" style="justify-content:space-between"><h3>Forma</h3></div>
       <div class="metrics">
         <div class="metric"><span class="eyebrow">FTP actual</span><span class="num" id="ftpNow">—</span><span class="sub" id="ftpNext"></span></div>
-        <div class="metric"><span class="eyebrow">VO2 máx bici</span><span class="num">—</span><span class="sub">Pendiente de cargar desde Garmin</span></div>
+        <div class="metric"><span class="eyebrow">VO2 máx bici</span><span class="num" id="vo2Now">—</span><span class="sub" id="vo2Sub"></span></div>
         <div class="metric"><span class="eyebrow">Tests</span><span class="num" id="ftpTests">0/2</span><span class="sub">1 dic y 9 feb</span></div>
       </div>
     </div>

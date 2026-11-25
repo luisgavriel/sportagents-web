@@ -142,6 +142,19 @@ function renderProgreso(){
   // Peso: pesadas reales + línea objetivo
   lineChart($("chWeight"),{x0:ts(W.length?(W[0][0]<"2026-11-20"?"2026-11-20":W[0][0]):"2026-11-20"),x1:ts("2027-02-28"),yMin:66,yMax:72.5,yTicks:[66,67,68,69,70,71,72],xTicks:["2026-12-01","2027-01-01","2027-02-01","2027-02-28"],unit:"",
     series:[{pts:[["2026-12-01",71.4],["2027-02-28",67]],color:"var(--muted)",w:1.6,dash:"5 5"},{pts:W.filter(w=>w[0]>="2026-11-20"),color:"var(--accent)",w:2,dots:true,end:true,endDec:2}]});
+  renderVo2(sub,x0,x1,xt);
+}
+// VO2 máx de Garmin: solo hay valor los días con actividad que lo calcula; se unen los puntos.
+function renderVo2(sub,x0,x1,xt){
+  const bike=sub.filter(r=>r[8]!=null).map(r=>[r[0],r[8]]), run=sub.filter(r=>r[10]!=null).map(r=>[r[0],r[10]]);
+  const lastB=G.filter(r=>r[8]!=null).at(-1), lastR=G.filter(r=>r[10]!=null).at(-1);
+  $("vo2Now").innerHTML=lastB?`${nf(lastB[8],1)}<span class="unit">ml/kg/min</span>`:"—";
+  $("vo2Sub").textContent=lastB?`Último dato ${fmtD(lastB[0])}${lastR?` · carrera ${nf(lastR[10],1)}`:""}`:"Sin datos de Garmin todavía";
+  if(!bike.length&&!run.length){$("chVo2").innerHTML=`<div class="sub">Sin datos de VO2 máx en este periodo</div>`;return}
+  const vals=[...bike,...run].map(p=>p[1]), lo=Math.floor(Math.min(...vals))-1, hi=Math.ceil(Math.max(...vals))+1;
+  const yT=[];for(let v=lo;v<=hi;v++)yT.push(v);
+  lineChart($("chVo2"),{x0,x1,yMin:lo,yMax:hi,yTicks:yT.length>6?yT.filter((v,i)=>i%2===0):yT,h:170,xTicks:xt,
+    series:[{pts:run,color:"var(--muted)",w:1.4,dots:true},{pts:bike,color:"var(--accent)",w:2.2,dots:true,end:bike.length>0,endDec:1}]});
 }
 $("rangeSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>{range=+b.dataset.r;$("rangeSeg").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));renderProgreso()});
 
@@ -268,7 +281,7 @@ async function loadData(){
   ]);
   const err=[rec,wt,plan,rep,ftp,str].find(r=>r.error);
   if(err)throw err.error;
-  G=rec.data.map(r=>[r.calendar_date,r.rhr,r.hrv,r.hrv_week,r.hrv_status,r.sleep_score,r.sleep_h==null?null:+r.sleep_h,r.body_battery,null,r.vigorous_min]);
+  G=rec.data.map(r=>[r.calendar_date,r.rhr,r.hrv,r.hrv_week,r.hrv_status,r.sleep_score,r.sleep_h==null?null:+r.sleep_h,r.body_battery,r.vo2_bike==null?null:+r.vo2_bike,r.vigorous_min,r.vo2_run==null?null:+r.vo2_run]);
   const lastBase=[...rec.data].reverse().find(r=>r.hrv_low&&r.hrv_high);
   if(lastBase)BASE={low:lastBase.hrv_low,high:lastBase.hrv_high};
   const byDay={};
@@ -334,7 +347,8 @@ async function boot(){
     const lastG=G.length?G.at(-1)[0]:null;
     $("status").textContent=lastG?`Datos de Garmin hasta el ${fmtD(lastG)} · ${session.user.email}`:"Sin datos todavía";
     if(!G.length&&!W.length&&!Object.keys(P).length)$("status").textContent="No se ven datos: este correo no está autorizado o faltan permisos.";
-  }catch(e){$("status").textContent="Error al cargar datos: "+(e.message||e)}
+  }catch(e){$("status").textContent=navigator.onLine?"Error al cargar datos: "+(e.message||e):"Sin conexión y sin datos guardados todavía"}
+  if(!navigator.onLine&&G.length)$("status").textContent=`Sin conexión: datos guardados (Garmin hasta el ${fmtD(G.at(-1)[0])})`;
   setupDays();renderHoy();renderPlanEnd();renderWeek();syncSeg();generate();renderInformes();
 }
 $("loginForm").addEventListener("submit",async e=>{
@@ -347,3 +361,4 @@ $("loginForm").addEventListener("submit",async e=>{
 $("logout").onclick=async()=>{await sb.auth.signOut();location.reload()};
 sb.auth.onAuthStateChange((ev)=>{if(ev==="SIGNED_IN"&&$("app").hidden)boot()});
 boot();
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
