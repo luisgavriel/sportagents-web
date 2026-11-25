@@ -1,6 +1,6 @@
 
 // ---- Datos reales (garmin_daily): fecha, FCreposo, HRV, HRVsemanal, estado, puntSueño, horasSueño, BBmax, estrés, minVigorosos
-let G=[],W=[],P={},R=[],BASE={low:55,high:74},FTP=225,sb=null,lastSaved=null;
+let H={},G=[],W=[],P={},R=[],BASE={low:55,high:74},FTP=225,sb=null,lastSaved=null;
 const SPORT={bike:"Bici",run:"Carrera",strength:"Fuerza"};
 const DOW=["dom","lun","mar","mié","jue","vie","sáb"];
 const MON=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
@@ -146,22 +146,24 @@ function generate(){
   const rest=state.dur===25?"60 s":"75–90 s";
   let html=`<div class="row" style="justify-content:space-between"><h2>${state.place==="casa"?"Fuerza en casa":"Fuerza en el gimnasio"} · ${state.dur}′</h2><span class="pill ${rec.lvl}"><span class="dot"></span>${deload?"Descarga":"Semana normal"}</span></div>
   <div class="sub">Calentamiento 5′: movilidad de cadera y hombro y una serie ligera del primer ejercicio. ${sets} series, ${reps} repeticiones dejando 2 en recámara${deload?", carga −20 %":""}. Descanso ${rest} entre superseries.</div>`;
+  let idx=0;
   blocks.forEach(([tag,pats])=>{
     pats.forEach((p,j)=>{
+      const i=idx++;
       const opts=options(p); const key=tag+p;
       if(state.pick[key]==null)state.pick[key]=(state.seed+j)%Math.max(1,opts.length);
       const ex=opts[state.pick[key]%Math.max(1,opts.length)];
       const isCore=p==="core";
-      html+=`<div class="ex"><span class="tag">${tag}${j+1}</span><div><div class="name">${ex?ex[0]:"Sin material para este patrón"}</div><div class="sub">${sets} × ${isCore?"30–40 s":p==="unilateral"?"8–10 por lado":reps}${ex&&!isCore?(state.place==="casa"?" · si completas todo al tope, la próxima vez más lento o variante más difícil":" · si completas todo al tope, +2,5 kg la próxima vez"):""}</div></div>${opts.length>1?`<button class="swap" data-k="${key}">Cambiar</button>`:"<span></span>"}</div>`;
+      html+=`<div class="ex"><span class="tag">${tag}${j+1}</span><div><div class="name">${ex?ex[0]:"Sin material para este patrón"}</div><div class="sub">${sets} × ${isCore?"30–40 s":p==="unilateral"?"8–10 por lado":reps}${ex&&!isCore?(state.place==="casa"?" · si completas todo al tope, la próxima vez más lento o variante más difícil":" · si completas todo al tope, +2,5 kg la próxima vez"):""}</div></div>${opts.length>1?`<button class="swap" data-k="${key}">Cambiar</button>`:"<span></span>"}${ex?logRow(i,ex[0],isCore,deload):""}</div>`;
     });
   });
-  html+=`<div class="sub" style="border-top:1px solid var(--line);padding-top:10px">Vuelta a la calma 3′.</div><div class="row"><button class="btn" id="saveBtn">Guardar sesión</button><button class="btn ghost" id="doneBtn" ${lastSaved?"":"disabled"}>Marcar como hecha</button><span class="sub" id="saveNote"></span></div>`;
+  html+=`<div class="sub" style="border-top:1px solid var(--line);padding-top:10px">Vuelta a la calma 3′.</div><div class="row"><button class="btn" id="saveBtn">Guardar como hecha</button><span class="sub" id="saveNote">Apunta los kilos y las repeticiones de la última serie de cada ejercicio.</span></div>`;
   state.current=blocks.flatMap(([tag,pats])=>pats.map((p,j)=>{const o=options(p);const ex=o[state.pick[tag+p]%Math.max(1,o.length)];return {tag:tag+(j+1),pattern:p,name:ex?ex[0]:null,sets,reps:p==="core"?"30–40 s":p==="unilateral"?"8–10 por lado":reps}}));
   state.sets=sets;
   $("workout").innerHTML=html;
   $("workout").querySelectorAll(".swap").forEach(b=>b.onclick=()=>{state.pick[b.dataset.k]++;generate()});
   $("genNote").textContent=rec.lvl==="bad"?"Recuperación baja: una serie menos.":"";
-  $("saveBtn").onclick=saveSession; $("doneBtn").onclick=markDone;
+  $("saveBtn").onclick=saveSession; lastSaved=null;
 }
 [["placeSeg","p","place"],["durSeg","d","dur"],["typeSeg","t","type"]].forEach(([id,k,f])=>$(id).querySelectorAll("button").forEach(b=>b.onclick=()=>{state[f]=f==="dur"?+b.dataset[k]:b.dataset[k];state.pick={};syncSeg();generate()}));
 $("genBtn").onclick=()=>{state.seed++;state.pick={};generate()};
@@ -216,14 +218,15 @@ function mapSession(row){
 async function loadData(){
   const since=new Date();since.setDate(since.getDate()-120);
   const sinceISO=since.toLocaleDateString("sv-SE");
-  const [rec,wt,plan,rep,ftp]=await Promise.all([
+  const [rec,wt,plan,rep,ftp,str]=await Promise.all([
     sb.from("v_recovery").select("*").gte("calendar_date",sinceISO).order("calendar_date"),
     sb.from("v_weight").select("*").order("measured_at"),
     sb.from("v_plan").select("*").order("session_date"),
     sb.from("v_reports").select("*").order("week_start",{ascending:false}),
-    sb.from("v_ftp").select("*").order("test_date")
+    sb.from("v_ftp").select("*").order("test_date"),
+    sb.from("strength_sessions").select("session_date,exercises,done_at").not("done_at","is",null).order("session_date")
   ]);
-  const err=[rec,wt,plan,rep,ftp].find(r=>r.error);
+  const err=[rec,wt,plan,rep,ftp,str].find(r=>r.error);
   if(err)throw err.error;
   G=rec.data.map(r=>[r.calendar_date,r.rhr,r.hrv,r.hrv_week,r.hrv_status,r.sleep_score,r.sleep_h==null?null:+r.sleep_h,r.body_battery,null,r.vigorous_min]);
   const lastBase=[...rec.data].reverse().find(r=>r.hrv_low&&r.hrv_high);
@@ -234,6 +237,7 @@ async function loadData(){
   P={};plan.data.forEach(r=>{(P[r.session_date]=P[r.session_date]||[]).push(mapSession(r))});
   Object.values(P).forEach(a=>a.sort((x,y)=>x.h<y.h?-1:1));
   R=rep.data;
+  H={};str.data.forEach(r=>(r.exercises||[]).forEach(e=>{if(e.name&&e.load_kg!=null)H[e.name]={date:r.session_date,load_kg:+e.load_kg,reps_done:e.reps_done,top:!!e.top}}));
   if(ftp.data.length)FTP=ftp.data.at(-1).ftp_watts;
   $("ftpNow").innerHTML=`${FTP}<span class="unit">W</span>`;
   const done=ftp.data.filter(t=>t.test_date>="2026-12-01").length;
@@ -244,19 +248,35 @@ function avg7(){
   const t=ts(W.at(-1)[0]);const w=W.filter(x=>ts(x[0])>t-7*864e5).map(x=>x[1]);
   return w.reduce((a,b)=>a+b,0)/w.length;
 }
+// Historial de cargas: última vez que se hizo cada ejercicio
+function suggest(name,deload){
+  const h=H[name]; if(!h||h.load_kg==null)return null;
+  let kg=h.load_kg, why="misma carga";
+  if(h.top){ if(state.place==="gym"){kg=h.load_kg+2.5;why="+2,5 kg: la última vez llegaste al tope"} else why="llegaste al tope: hazlo más lento (3-1-1) o pasa a la variante más difícil"}
+  if(deload){kg=Math.round(kg*0.8/2.5)*2.5;why="descarga: −20 %"}
+  return {kg,why,h};
+}
+function logRow(i,name,isCore,deload){
+  const sg=suggest(name,deload);
+  const last=sg?`Última vez (${fmtD(sg.h.date)}): ${nf(sg.h.load_kg,1)} kg × ${sg.h.reps_done??"?"}${sg.h.top?" al tope":""} · hoy ${nf(sg.kg,1)} kg (${sg.why})`:"Primera vez: elige una carga con la que te sobren 2 repeticiones";
+  const inp='style="width:72px;font:inherit;padding:6px 8px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--fg)"';
+  return `<div style="grid-column:2/4;display:flex;flex-direction:column;gap:6px"><div class="sub">${isCore?"Opcional: lastre en kg":last}</div>
+   <div class="row" style="gap:8px"><input id="kg-${i}" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" aria-label="Kilos" value="${sg?sg.kg:""}" ${inp}>
+   <input id="reps-${i}" type="number" inputmode="numeric" min="0" placeholder="reps" aria-label="Repeticiones de la última serie" ${inp}>
+   <label class="sub" style="display:inline-flex;gap:6px;align-items:center"><input id="top-${i}" type="checkbox">todas las series al tope</label></div></div>`;
+}
 async function saveSession(){
   const d=$("daySel").value, ses=(P[d]||[]).find(s=>s.sport==="strength");
-  const row={plan_session_id:ses?ses.id:null,session_date:d,place:state.place,duration_min:state.dur,deload:state.type==="descarga",
-    exercises:state.current.map(e=>({...e,load_kg:null,done:false}))};
+  const num=id=>{const v=$(id)?.value;return v===""||v==null?null:+v};
+  const exercises=state.current.map((e,i)=>({...e,load_kg:num("kg-"+i),reps_done:num("reps-"+i),top:!!$("top-"+i)?.checked,done:true}));
+  const row={plan_session_id:ses?ses.id:null,session_date:d,place:state.place,duration_min:state.dur,deload:state.type==="descarga",exercises,done_at:new Date().toISOString()};
   $("saveNote").textContent="Guardando…";
-  const {data,error}=await sb.from("strength_sessions").insert(row).select("id").single();
+  const q=lastSaved?sb.from("strength_sessions").update(row).eq("id",lastSaved).select("id").single():sb.from("strength_sessions").insert(row).select("id").single();
+  const {data,error}=await q;
   if(error){$("saveNote").textContent="No se pudo guardar: "+error.message;return}
-  lastSaved=data.id;$("doneBtn").disabled=false;$("saveNote").textContent="Guardada";
-}
-async function markDone(){
-  if(!lastSaved)return;
-  const {error}=await sb.from("strength_sessions").update({done_at:new Date().toISOString()}).eq("id",lastSaved);
-  $("saveNote").textContent=error?"No se pudo marcar: "+error.message:"Marcada como hecha";
+  lastSaved=data.id;
+  exercises.forEach(e=>{if(e.name&&e.load_kg!=null)H[e.name]={date:d,load_kg:e.load_kg,reps_done:e.reps_done,top:e.top}});
+  $("saveNote").textContent="Guardada como hecha. Si corriges algo, vuelve a pulsar y se actualiza.";
 }
 
 // ---- Arranque
