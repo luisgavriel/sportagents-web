@@ -1,6 +1,6 @@
 
 // ---- Datos reales (garmin_daily): fecha, FCreposo, HRV, HRVsemanal, estado, puntSueño, horasSueño, BBmax, estrés, minVigorosos
-let H={},G=[],W=[],P={},R=[],BASE={low:55,high:74},FTP=225,sb=null,lastSaved=null;
+let A={},ACT_OK=false,SD={},H={},G=[],W=[],P={},R=[],BASE={low:55,high:74},FTP=225,sb=null,lastSaved=null;
 const SPORT={bike:"Bici",run:"Carrera",strength:"Fuerza"};
 const DOW=["dom","lun","mar","mié","jue","vie","sáb"];
 const MON=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
@@ -15,7 +15,7 @@ function setupDays(){
   for(let i=-3;i<=10;i++){const d=new Date(t+"T12:00:00");d.setDate(d.getDate()+i);ds.push(d.toLocaleDateString("sv-SE"))}
   $("daySel").innerHTML=ds.map(d=>`<option value="${d}">${d===t?"Hoy, ":""}${fmtD(d)}</option>`).join("");
   $("daySel").value=t;
-  $("daySel").onchange=renderHoy;
+  $("daySel").onchange=()=>{renderHoy();renderWeek()};
 }
 // ---- Semáforo de recuperación (última noche real)
 function recovery(){
@@ -68,6 +68,46 @@ function renderHoy(){
     </div>
     <div class="bar" role="img" aria-label="Progreso hacia 67 kg"><span style="width:${Math.max(2,pct*100)}%"></span></div>
     <div class="sub">${Math.round(pct*100)} % del camino desde 71,4 kg · ritmo necesario ≈ 0,34 kg/semana</div>`;
+}
+// ---- Aviso de fin de plan
+function renderPlanEnd(){
+  const el=$("planEndCard"), dates=Object.keys(P).sort();
+  if(!dates.length){el.hidden=true;return}
+  const last=dates.at(-1), t=todayISO(), days=Math.round((ts(last)-ts(t))/864e5);
+  if(days>14){el.hidden=true;return}
+  el.hidden=false;
+  el.innerHTML=days>=0
+    ?`<div class="row" style="justify-content:space-between"><h3>El plan termina el ${fmtD(last)}</h3><span class="pill warn">${days===0?"Termina hoy":`Quedan ${days} día${days===1?"":"s"}`}</span></div><div class="sub">Pídele a Claude el siguiente bloque con algo como «revisemos el plan». Analizará cómo te ha ido y lo preparará contigo.</div>`
+    :`<div class="row" style="justify-content:space-between"><h3>El plan terminó el ${fmtD(last)}</h3><span class="pill bad">Sin plan</span></div><div class="sub">Pídele a Claude el siguiente bloque con algo como «revisemos el plan».</div>`;
+}
+// ---- Vista semanal (lunes a domingo de la semana del día elegido)
+const SPORT_OF=a=>/strength|fuerza/i.test(a)?"strength":/run|carrera|trail/i.test(a)?"run":/cycl|bike|ride|bici|virtual/i.test(a)?"bike":a;
+function renderWeek(){
+  const sel=$("daySel").value, d0=new Date(sel+"T12:00:00"); d0.setDate(d0.getDate()-((d0.getDay()+6)%7));
+  const t=todayISO(); let plan=0,done=0,nDone=0,nPlan=0,rows="";
+  for(let i=0;i<7;i++){
+    const d=new Date(d0);d.setDate(d0.getDate()+i);const iso=d.toLocaleDateString("sv-SE");
+    const ss=P[iso]||[]; const acts=(A[iso]||[]).map(a=>({...a,s:SPORT_OF(a.sport)}));
+    const items=ss.map(s=>{
+      plan+=s.min;nPlan++;
+      let st,mins=0;
+      if(s.sport==="strength"&&SD[iso]){st="ok";mins=SD[iso]}
+      else{const a=acts.find(a=>a.s===s.sport&&!a.used);if(a){a.used=true;st="ok";mins=a.duration_min||0}}
+      if(st==="ok"){done+=mins;nDone++}
+      else st=iso>t?"todo":iso===t?"today":(ACT_OK||s.sport==="strength")?"miss":"unk";
+      const lab={ok:"Hecha",todo:"Pendiente",today:"Hoy",miss:"Saltada",unk:"Sin comprobar"}[st];
+      const cls={ok:"ok",todo:"neutral",today:"neutral",miss:"bad",unk:"warn"}[st];
+      return `<div class="row" style="justify-content:space-between;gap:8px"><span>${s.name} <span class="sub">· ${s.min}′</span></span><span class="pill ${cls}">${lab}</span></div>`;
+    }).join("");
+    const extra=acts.filter(a=>!a.used).map(a=>`<div class="row" style="justify-content:space-between"><span class="sub">Extra: ${esc(a.sport)} · ${a.duration_min||"?"}′</span><span class="pill ok">Hecha</span></div>`).join("");
+    if(!items&&!extra)continue;
+    rows+=`<div style="display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)"><div class="eyebrow">${fmtD(iso)}</div>${items}${extra}</div>`;
+  }
+  const h=m=>`${Math.floor(m/60)} h ${String(Math.round(m%60)).padStart(2,"0")}`;
+  $("weekCard").innerHTML=`<div class="row" style="justify-content:space-between"><h2>Semana</h2><span class="sub">${nDone}/${nPlan} sesiones · ${h(done)} de ${h(plan)}</span></div>
+   <div class="bar" role="img" aria-label="Horas hechas frente a planificadas"><span style="width:${plan?Math.min(100,done/plan*100):0}%"></span></div>
+   ${rows||'<div class="sub">Sin sesiones planificadas esta semana.</div>'}
+   ${ACT_OK?"":'<div class="sub">Bici y carrera aún no se comprueban: falta guardar tus actividades de Garmin.</div>'}`;
 }
 
 // ---- Gráficos SVG
@@ -224,7 +264,7 @@ async function loadData(){
     sb.from("v_plan").select("*").order("session_date"),
     sb.from("v_reports").select("*").order("week_start",{ascending:false}),
     sb.from("v_ftp").select("*").order("test_date"),
-    sb.from("strength_sessions").select("session_date,exercises,done_at").not("done_at","is",null).order("session_date")
+    sb.from("strength_sessions").select("session_date,exercises,done_at,duration_min").not("done_at","is",null).order("session_date")
   ]);
   const err=[rec,wt,plan,rep,ftp,str].find(r=>r.error);
   if(err)throw err.error;
@@ -237,6 +277,10 @@ async function loadData(){
   P={};plan.data.forEach(r=>{(P[r.session_date]=P[r.session_date]||[]).push(mapSession(r))});
   Object.values(P).forEach(a=>a.sort((x,y)=>x.h<y.h?-1:1));
   R=rep.data;
+  SD={};str.data.forEach(r=>{SD[r.session_date]=(SD[r.session_date]||0)+(r.duration_min||0)});
+  A={};ACT_OK=false;
+  try{const act=await sb.from("v_activities").select("activity_date,sport,duration_min");
+    if(!act.error){ACT_OK=true;act.data.forEach(a=>(A[a.activity_date]=A[a.activity_date]||[]).push(a))}}catch(e){}
   H={};str.data.forEach(r=>(r.exercises||[]).forEach(e=>{if(e.name&&e.load_kg!=null)H[e.name]={date:r.session_date,load_kg:+e.load_kg,reps_done:e.reps_done,top:!!e.top}}));
   if(ftp.data.length)FTP=ftp.data.at(-1).ftp_watts;
   $("ftpNow").innerHTML=`${FTP}<span class="unit">W</span>`;
@@ -275,6 +319,7 @@ async function saveSession(){
   const {data,error}=await q;
   if(error){$("saveNote").textContent="No se pudo guardar: "+error.message;return}
   lastSaved=data.id;
+  SD[d]=state.dur;renderWeek();
   exercises.forEach(e=>{if(e.name&&e.load_kg!=null)H[e.name]={date:d,load_kg:e.load_kg,reps_done:e.reps_done,top:e.top}});
   $("saveNote").textContent="Guardada como hecha. Si corriges algo, vuelve a pulsar y se actualiza.";
 }
@@ -290,7 +335,7 @@ async function boot(){
     $("status").textContent=lastG?`Datos de Garmin hasta el ${fmtD(lastG)} · ${session.user.email}`:"Sin datos todavía";
     if(!G.length&&!W.length&&!Object.keys(P).length)$("status").textContent="No se ven datos: este correo no está autorizado o faltan permisos.";
   }catch(e){$("status").textContent="Error al cargar datos: "+(e.message||e)}
-  setupDays();renderHoy();syncSeg();generate();renderInformes();
+  setupDays();renderHoy();renderPlanEnd();renderWeek();syncSeg();generate();renderInformes();
 }
 $("loginForm").addEventListener("submit",async e=>{
   e.preventDefault();
