@@ -2,7 +2,7 @@
 // - Archivos de la app: primero la red; supabase-js y fuentes: primero la caché.
 // - Lecturas de Supabase (GET /rest/v1/...): primero la red; sin conexión, la última respuesta guardada.
 // Escrituras (guardar fuerza) y el login siempre van a la red.
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL = `shell-${VERSION}`, DATA = "data-v1";
 const FILES = ["./", "index.html", "app.js", "guides.js", "figures.js", "style.css", "manifest.webmanifest", "icons/icon-192.png"];
 const CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
@@ -30,9 +30,9 @@ self.addEventListener("fetch", (e) => {
     return;
   }
   if (url.pathname.includes("/auth/v1/")) return;
-  // Archivos propios: primero la red (para ver siempre la última versión); sin conexión, la caché.
+  // Archivos propios: primero la red, saltándose la caché HTTP (GitHub Pages guarda 10 min) para ver siempre la última versión; sin conexión, la caché.
   if (url.origin === location.origin) {
-    e.respondWith(caches.open(SHELL).then((c) => fetch(req)
+    e.respondWith(caches.open(SHELL).then((c) => fetch(req, { cache: "no-cache" })
       .then((r) => { if (r.ok) c.put(req, r.clone()); return r; })
       .catch(async () => (await c.match(req, { ignoreSearch: true })) || (req.mode === "navigate" ? c.match("index.html") : Response.error()))));
     return;

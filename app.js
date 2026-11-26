@@ -626,4 +626,7 @@ $("loginForm").addEventListener("submit",async e=>{
 $("logout").onclick=async()=>{await sb.auth.signOut();location.reload()};
 sb.auth.onAuthStateChange((ev)=>{if(ev==="SIGNED_IN"&&$("app").hidden)boot()});
 boot();
-if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+// Al activarse una versión nueva de la app, recargar una vez para usarla
+if("serviceWorker" in navigator){const had=!!navigator.serviceWorker.controller;let reloaded=false;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{if(had&&!reloaded){reloaded=true;location.reload()}});
+  navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>r.update()).catch(()=>{})}
