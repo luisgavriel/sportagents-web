@@ -167,37 +167,92 @@ function renderPlanEnd(){
 }
 // ---- Semana (lunes a domingo del día elegido)
 const SPORT_OF=a=>/strength|fuerza/i.test(a)?"strength":/run|carrera|trail/i.test(a)?"run":/cycl|bik|ride|bici|virtual/i.test(a)?"bike":a;
+// ---- Calendario (tarjeta Semana): semana con flechas, vista de mes y detalle del día
+const MONL=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const isoOf=d=>d.toLocaleDateString("sv-SE");
+const addD=(iso,n)=>{const d=new Date(iso+"T12:00:00");d.setDate(d.getDate()+n);return isoOf(d)};
+const mondayOf=iso=>{const d=new Date(iso+"T12:00:00");d.setDate(d.getDate()-((d.getDay()+6)%7));return isoOf(d)};
+const cal={mode:"week",start:null,month:null,sel:null,base:null};
+// Estado de un día: sesiones del plan (hecha / pendiente / saltada) y actividades extra
+function dayInfo(iso){
+  const t=todayISO(), ss=P[iso]||[], acts=(A[iso]||[]).map(a=>({...a,s:SPORT_OF(a.sport)}));
+  const items=ss.map(s=>{
+    let st,mins=0;
+    if(s.sport==="strength"&&SD[iso]){st="ok";mins=SD[iso]}
+    else{const a=acts.find(a=>a.s===s.sport&&!a.used);if(a){a.used=true;st="ok";mins=a.duration_min||0}}
+    if(st!=="ok")st=iso>t?"todo":iso===t?"today":(ACT_OK||s.sport==="strength")?"miss":"unk";
+    return {s,st,mins};
+  });
+  const extra=acts.filter(a=>!a.used);
+  if(SD[iso]&&!ss.some(s=>s.sport==="strength"))extra.push({s:"strength",duration_min:SD[iso]});
+  return {items,extra};
+}
+const ST_LAB={ok:"Hecha",todo:"Pendiente",today:"Hoy",miss:"Saltada",unk:"Sin comprobar"};
+const ST_CLS={ok:"ok",todo:"plain",today:"neutral",miss:"bad",unk:"warn"};
+function dayClass(iso,inf){
+  const sts=inf.items.map(i=>i.st);
+  if(!sts.length)return inf.extra.length?"ok":iso===todayISO()?"today":"";
+  return sts.includes("miss")?"miss":sts.every(s=>s==="ok")?"ok":iso===todayISO()?"today":"";
+}
+function dayLines(iso,inf){
+  const items=inf.items.map(({s,st})=>`<div class="wline"><span>${esc(s.name)} <span class="sub">· ${s.min}′</span></span><span class="chip ${ST_CLS[st]}">${ST_LAB[st]}</span></div>`).join("");
+  const extra=inf.extra.map(a=>`<div class="wline"><span class="sub">${inf.items.length?"Extra: ":""}${esc(SPORT[a.s]||a.name||a.sport)} · ${a.duration_min??"?"}′</span><span class="chip ok">Hecha</span></div>`).join("");
+  return items+extra;
+}
+const rangeTxt=(a,b)=>{const x=new Date(a+"T12:00:00"),y=new Date(b+"T12:00:00");return x.getMonth()===y.getMonth()?`${x.getDate()}–${y.getDate()} ${MON[y.getMonth()]}`:`${x.getDate()} ${MON[x.getMonth()]} – ${y.getDate()} ${MON[y.getMonth()]}`};
 function renderWeek(){
-  const sel=$("daySel").value, d0=new Date(sel+"T12:00:00"); d0.setDate(d0.getDate()-((d0.getDay()+6)%7));
-  const t=todayISO(); let plan=0,done=0,nDone=0,nPlan=0,rows="",strip="";
-  for(let i=0;i<7;i++){
-    const d=new Date(d0);d.setDate(d0.getDate()+i);const iso=d.toLocaleDateString("sv-SE");
-    const ss=P[iso]||[]; const acts=(A[iso]||[]).map(a=>({...a,s:SPORT_OF(a.sport)}));
-    const sts=[];
-    const items=ss.map(s=>{
-      plan+=s.min;nPlan++;
-      let st,mins=0;
-      if(s.sport==="strength"&&SD[iso]){st="ok";mins=SD[iso]}
-      else{const a=acts.find(a=>a.s===s.sport&&!a.used);if(a){a.used=true;st="ok";mins=a.duration_min||0}}
-      if(st==="ok"){done+=mins;nDone++}
-      else st=iso>t?"todo":iso===t?"today":(ACT_OK||s.sport==="strength")?"miss":"unk";
-      sts.push(st);
-      const lab={ok:"Hecha",todo:"Pendiente",today:"Hoy",miss:"Saltada",unk:"Sin comprobar"}[st];
-      const cls={ok:"ok",todo:"plain",today:"neutral",miss:"bad",unk:"warn"}[st];
-      return `<div class="wline"><span>${esc(s.name)} <span class="sub">· ${s.min}′</span></span><span class="chip ${cls}">${lab}</span></div>`;
-    }).join("");
-    const extra=acts.filter(a=>!a.used).map(a=>`<div class="wline"><span class="sub">Extra: ${esc(SPORT[a.s]||a.name||a.sport)} · ${a.duration_min||"?"}′</span><span class="chip ok">Hecha</span></div>`).join("");
-    const L="LMXJVSD"[i];
-    const dc=!sts.length?"":sts.includes("miss")?"miss":sts.every(s=>s==="ok")?"ok":iso===t?"today":"";
-    const mark=dc==="ok"?svgI(IC.check):dc==="miss"?svgI(IC.close):iso===t?"hoy":sts.length?"·":"—";
-    strip+=`<div class="wd ${dc||(iso===t?"today":"")}" title="${fmtD(iso)}"><span>${L}</span>${typeof mark==="string"&&mark.startsWith("<svg")?mark.replace("<svg",`<svg role="img" aria-label="${dc==="ok"?"hecha":"saltada"}"`):`<span>${mark}</span>`}</div>`;
-    if(items||extra)rows+=`<div style="padding-top:6px"><div class="eyebrow" style="padding:6px 0 2px">${fmtD(iso)}</div>${items}${extra}</div>`;
+  const sel=$("daySel").value;
+  if(cal.base!==sel){cal.base=sel;cal.start=mondayOf(sel);cal.month=sel.slice(0,7);cal.sel=null}
+  const t=todayISO(), el=$("weekCard"), navBtn=(id,lab,dir)=>`<button class="icon-btn sm" id="${id}" aria-label="${lab}">${svgI(IC.chev).replace("<svg",`<svg style="transform:rotate(${dir}deg)"`)}</button>`;
+  let body="",title="",sub="";
+  if(cal.mode==="week"){
+    const d0=cal.start; let plan=0,done=0,nDone=0,nPlan=0,rows="",strip="";
+    for(let i=0;i<7;i++){
+      const iso=addD(d0,i), inf=dayInfo(iso);
+      inf.items.forEach(({s,st,mins})=>{plan+=s.min;nPlan++;if(st==="ok"){done+=mins;nDone++}});
+      const dc=dayClass(iso,inf);
+      const mark=dc==="ok"?svgI(IC.check).replace("<svg",'<svg role="img" aria-label="hecha"'):dc==="miss"?svgI(IC.close).replace("<svg",'<svg role="img" aria-label="saltada"'):`<span>${iso===t?"hoy":inf.items.length?"·":"—"}</span>`;
+      strip+=`<button class="wd ${dc||(iso===t?"today":"")}${cal.sel===iso?" sel":""}" data-d="${iso}" aria-label="${fmtD(iso)}"><span>${"LMXJVSD"[i]} ${new Date(iso+"T12:00:00").getDate()}</span>${mark}</button>`;
+      const ln=dayLines(iso,inf); if(ln)rows+=`<div style="padding-top:6px"><div class="eyebrow" style="padding:6px 0 2px">${fmtD(iso)}</div>${ln}</div>`;
+    }
+    const h=m=>`${Math.floor(m/60)} h ${String(Math.round(m%60)).padStart(2,"0")}`;
+    title=rangeTxt(d0,addD(d0,6));
+    sub=nPlan?`${nDone} de ${nPlan} hechas · ${h(done)} de ${h(plan)}`:"";
+    body=`<div class="week">${strip}</div>`+(cal.sel?"":rows?`<details><summary>Ver las sesiones</summary>${rows}</details>`:'<div class="sub">Sin sesiones planificadas esta semana.</div>');
+  } else {
+    const [y,m]=cal.month.split("-").map(Number), first=`${cal.month}-01`, g0=mondayOf(first);
+    const last=isoOf(new Date(y,m,0,12)), g1=addD(mondayOf(last),6);
+    let cells="",nDone=0,nPlan=0;
+    for(let iso=g0;iso<=g1;iso=addD(iso,1)){
+      const inf=dayInfo(iso), out=iso.slice(0,7)!==cal.month;
+      if(!out)inf.items.forEach(i=>{nPlan++;if(i.st==="ok")nDone++});
+      const dots=inf.items.map(i=>`<i class="dot ${i.st}"></i>`).join("")+inf.extra.map(()=>'<i class="dot ok"></i>').join("");
+      cells+=`<button class="md${out?" out":""}${iso===t?" today":""}${cal.sel===iso?" sel":""}" data-d="${iso}" aria-label="${fmtD(iso)}"><span>${+iso.slice(8)}</span><span class="dots">${dots}</span></button>`;
+    }
+    title=`${MONL[m-1]} ${y}`;
+    sub=nPlan?`${nDone} de ${nPlan} hechas`:"";
+    body=`<div class="mgrid">${"LMXJVSD".split("").map(l=>`<span class="mh">${l}</span>`).join("")}${cells}</div>
+      <div class="legend"><span><i class="dot ok"></i>Hecha</span><span><i class="dot todo"></i>Pendiente</span><span><i class="dot miss"></i>Saltada</span></div>`;
   }
-  const h=m=>`${Math.floor(m/60)} h ${String(Math.round(m%60)).padStart(2,"0")}`;
-  $("weekCard").innerHTML=`<div class="row between"><h3>Semana</h3><span class="sub">${nDone} de ${nPlan} hechas · ${h(done)} de ${h(plan)}</span></div>
-   <div class="week">${strip}</div>
-   ${rows?`<details><summary>Ver las sesiones</summary>${rows}</details>`:'<div class="sub">Sin sesiones planificadas esta semana.</div>'}
-   ${ACT_OK?"":'<div class="sub">Bici y carrera aún no se comprueban: no se han podido leer tus actividades de Garmin.</div>'}`;
+  let det="";
+  if(cal.sel){const inf=dayInfo(cal.sel),ln=dayLines(cal.sel,inf);
+    det=`<div class="dayd"><div class="row between"><span class="eyebrow">${fmtD(cal.sel)}</span>${cal.sel!==sel&&[...$("daySel").options].some(o=>o.value===cal.sel)?`<button class="link" id="calGo">Ver este día en Hoy</button>`:""}</div>${ln||'<div class="sub" style="padding-top:6px">Nada planificado ni hecho.</div>'}</div>`}
+  const isNow=cal.mode==="week"?cal.start===mondayOf(t):cal.month===t.slice(0,7);
+  el.innerHTML=`<div class="row between" style="flex-wrap:nowrap;gap:8px">
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><h3>${cal.mode==="week"?"Semana":"Mes"}</h3><span class="sub">${title}${sub?" · "+sub:""}</span></div>
+      <div class="seg sm" role="group" aria-label="Vista"><button data-m="week" aria-pressed="${cal.mode==="week"}">Semana</button><button data-m="month" aria-pressed="${cal.mode==="month"}">Mes</button></div></div>
+    <div class="row between" style="flex-wrap:nowrap">${navBtn("calPrev",cal.mode==="week"?"Semana anterior":"Mes anterior",180)}
+      ${isNow?'<span class="sub">Ahora</span>':'<button class="link" id="calNow">Volver a hoy</button>'}
+      ${navBtn("calNext",cal.mode==="week"?"Semana siguiente":"Mes siguiente",0)}</div>
+    ${body}${det}
+    ${ACT_OK?"":'<div class="sub">Bici y carrera aún no se comprueban: no se han podido leer tus actividades de Garmin.</div>'}`;
+  const step=n=>{if(cal.mode==="week")cal.start=addD(cal.start,7*n);else{const d=new Date(cal.month+"-15T12:00:00");d.setMonth(d.getMonth()+n);cal.month=isoOf(d).slice(0,7)}cal.sel=null;renderWeek()};
+  $("calPrev").onclick=()=>step(-1);$("calNext").onclick=()=>step(1);
+  if($("calNow"))$("calNow").onclick=()=>{cal.start=mondayOf(t);cal.month=t.slice(0,7);cal.sel=null;renderWeek()};
+  el.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{cal.mode=b.dataset.m;
+    const ref=cal.sel||(cal.mode==="month"?cal.start:sel);cal.month=ref.slice(0,7);if(cal.mode==="week")cal.start=mondayOf(cal.sel||(cal.month===sel.slice(0,7)?sel:cal.month+"-01"));renderWeek()});
+  el.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{cal.sel=cal.sel===b.dataset.d?null:b.dataset.d;renderWeek()});
+  if($("calGo"))$("calGo").onclick=()=>{const ds=$("daySel");ds.value=cal.sel;ds.onchange();window.scrollTo({top:0,behavior:"smooth"})};
 }
 
 // ---- Gráficos SVG con valor al tocar

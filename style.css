@@ -187,3 +187,21 @@ nav.tabs .brand{display:none}
 }
 @media (max-width:380px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}}
+
+/* Calendario en la tarjeta Semana */
+.icon-btn.sm{width:40px;height:40px;border-radius:10px}
+.seg.sm{padding:3px;gap:2px;flex:none}.seg.sm button{min-height:34px;padding:0 10px;font-size:12px}
+.link{background:none;border:0;color:var(--accent);font:600 13px var(--body);cursor:pointer;padding:10px 4px;min-height:40px}
+button.wd{border:0;font-family:var(--body);cursor:pointer;min-height:52px;justify-content:center}
+.wd.sel,.md.sel{box-shadow:inset 0 0 0 2px var(--accent)}
+.mgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.mh{text-align:center;font-size:11px;font-weight:600;color:var(--muted);padding-bottom:2px}
+.md{border:0;background:var(--surface2);color:var(--soft);border-radius:8px;min-height:46px;padding:6px 0 5px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;font:600 13px var(--body)}
+.md.out{opacity:.35}.md.today{background:var(--accent-soft);color:var(--accent)}
+.md .dots{display:flex;gap:3px;min-height:6px;flex-wrap:wrap;justify-content:center;padding:0 2px}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--ok)}.dot.miss{background:var(--bad)}.dot.unk{background:var(--warn)}.dot.today{background:var(--accent)}.dot.todo{background:#4d6573}
+.legend i.dot{width:8px;height:8px;border-radius:50%}
+.dayd{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column}
+.dayd .row{align-items:center}
+.wd:focus-visible,.md:focus-visible,.link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
