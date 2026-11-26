@@ -380,6 +380,7 @@ function openGuide(i){
   $("guideIn").innerHTML=`<div class="grab" aria-hidden="true"></div>
     <div class="row between" style="flex-wrap:nowrap;align-items:flex-start"><div style="display:flex;flex-direction:column;gap:6px"><span class="eyebrow">${e.tag} · ${PAT_LABEL[e.pattern]} · ${state.place==="casa"?"casa":"gimnasio"}</span><h2 style="font-size:26px">${esc(e.name)}</h2></div>
       <button class="icon-btn" id="guideClose" aria-label="Cerrar">${svgI(IC.close)}</button></div>
+    ${typeof FIGS!=="undefined"&&FIGS[e.name]?`<div class="figbox">${FIG.panels(FIGS[e.name])}</div>`:""}
     <div class="row" style="gap:8px"><span class="chip neutral">${esc(g.m)}</span><span class="chip plain">${e.sets} × ${esc(e.reps)}</span></div>
     <div style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">3 claves</span>${g.k.map((k,n)=>`<div class="li"><span class="n">${n+1}</span><span>${esc(k)}</span></div>`).join("")}</div>
     <div style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Errores típicos</span>${g.e.map(x=>`<div class="li"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3L22 20H2Z" fill="none" stroke="var(--warn)" stroke-width="2.2"/><path d="M12 10v4M12 17v.5" stroke="var(--warn)" stroke-width="2.2"/></svg><span>${esc(x)}</span></div>`).join("")}</div>
