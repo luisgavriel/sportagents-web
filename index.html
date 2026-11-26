@@ -3,122 +3,135 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b6e8a">
+<meta name="theme-color" content="#0d1419">
 <title>SportAgents Entreno</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Entreno">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
-<style>:root{padding-top:env(safe-area-inset-top,0px)}body{margin:0}img{max-width:100%}.btn[disabled]{opacity:.5;cursor:default}</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px)}.btn[disabled]{opacity:.5;cursor:default}</style>
 </head>
 <body>
-<div class="wrap" id="login" hidden>
+<div class="offline" id="offline" role="status" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 20h.01M3 3l18 18"/></svg>
+  <span id="offlineTxt">Sin conexión · datos guardados</span>
+</div>
+
+<div class="wrap" id="login" hidden style="max-width:440px">
   <header class="top"><div><div class="eyebrow">SportAgents</div><h1>Entrar</h1></div></header>
   <form class="card" id="loginForm">
     <label for="email">Tu correo</label>
-    <input id="email" type="email" required autocomplete="email" style="font:inherit;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)">
+    <input id="email" type="email" required autocomplete="email" style="min-height:48px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg)">
     <button class="btn" type="submit">Enviarme el enlace</button>
     <div class="sub" id="loginMsg"></div>
   </form>
 </div>
 
-
 <div class="wrap" id="app" hidden>
   <header class="top">
-    <div>
-      <div class="eyebrow">SportAgents · Luis</div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span class="eyebrow" id="viewEyebrow"></span>
       <h1 id="viewTitle">Hoy</h1>
     </div>
-    <div class="row">
-      <label class="sub" for="daySel">Día</label>
-      <select id="daySel"></select>
-    </div>
+    <div id="dayBox"><label class="sub" for="daySel" style="position:absolute;left:-9999px">Día</label><select id="daySel" class="day"></select></div>
   </header>
-  <div class="poc row" style="justify-content:space-between"><span id="status">Cargando datos…</span><button class="swap" id="logout" style="background:none;border:0;color:var(--accent);cursor:pointer">Salir</button></div>
 
   <!-- HOY -->
-  <section id="v-hoy" class="wrap" style="gap:16px">
-    <div class="card" id="recoveryCard"></div>
-    <div class="card" id="planEndCard" hidden></div>
-    <div class="card" id="sessionsCard"></div>
-    <div class="card" id="weekCard"></div>
-    <div class="card" id="weightCard"></div>
+  <section id="v-hoy" class="view">
+    <div class="hoy-grid">
+      <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+        <section class="card" id="recoveryCard" aria-label="Recuperación"></section>
+        <section class="card" id="sessionsCard" aria-label="Entrenamiento del día"></section>
+      </div>
+      <div class="hoy-side">
+        <section class="card" id="planEndCard" hidden></section>
+        <section class="card" id="weekCard" aria-label="Semana"></section>
+        <section class="card" id="weightCard" aria-label="Peso"></section>
+      </div>
+    </div>
+    <div class="foot"><span id="status">Cargando datos…</span><button id="logout">Salir</button></div>
   </section>
 
   <!-- PROGRESO -->
-  <section id="v-progreso" class="wrap" hidden style="gap:16px">
-    <div class="card">
-      <div class="row" style="justify-content:space-between"><h2>Peso</h2><span class="sub">Objetivo 67 kg el 28 feb</span></div>
-      <div class="chart" id="chWeight"></div>
-      <div class="legend"><span><i style="background:var(--accent)"></i>Pesadas Withings</span><span><i style="background:var(--muted)"></i>Línea objetivo 71,4 → 67 kg</span></div>
-    </div>
-    <div class="card">
-      <div class="row" style="justify-content:space-between"><h2>HRV nocturna</h2><div class="seg" id="rangeSeg"><button data-r="30">30 d</button><button data-r="90" aria-pressed="true">90 d</button></div></div>
-      <div class="chart" id="chHrv"></div>
-      <div class="legend"><span><i style="background:var(--band);height:10px"></i>Rango normal 55–74 ms</span><span><i style="background:var(--accent)"></i>Media 7 días</span><span><i style="background:var(--muted);height:2px"></i>Cada noche</span></div>
-    </div>
-    <div class="grid2">
-      <div class="card"><h3>FC en reposo</h3><div class="chart" id="chRhr"></div></div>
-      <div class="card"><h3>Horas de sueño</h3><div class="chart" id="chSleep"></div></div>
-    </div>
-    <div class="card">
-      <h3>VO2 máx (Garmin)</h3>
-      <div class="chart" id="chVo2"></div>
-      <div class="legend"><span><i style="background:var(--accent)"></i>Bici</span><span><i style="background:var(--muted)"></i>Carrera</span></div>
-    </div>
-    <div class="card">
-      <div class="row" style="justify-content:space-between"><h3>Forma</h3></div>
-      <div class="metrics">
-        <div class="metric"><span class="eyebrow">FTP actual</span><span class="num" id="ftpNow">—</span><span class="sub" id="ftpNext"></span></div>
-        <div class="metric"><span class="eyebrow">VO2 máx bici</span><span class="num" id="vo2Now">—</span><span class="sub" id="vo2Sub"></span></div>
-        <div class="metric"><span class="eyebrow">Tests</span><span class="num" id="ftpTests">0/2</span><span class="sub">1 dic y 9 feb</span></div>
+  <section id="v-progreso" class="view" hidden>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="seg" id="rangeSeg" role="group" aria-label="Periodo de todos los gráficos" style="align-self:flex-start">
+        <button data-r="30">30 días</button><button data-r="90" aria-pressed="true">90 días</button><button data-r="0">Todo</button>
       </div>
+      <section class="card" id="cardWeight" aria-label="Peso">
+        <div class="row between"><h2>Peso</h2><span class="sub">Objetivo 67 kg el 28 feb</span></div>
+        <div class="row" id="weightStats" style="gap:10px;align-items:stretch"></div>
+        <div class="chart" id="chWeight"></div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>Pesadas</span><span><i style="background:var(--muted);height:2px"></i>Línea objetivo 71,4 → 67 kg</span><span>Toca el gráfico para ver el valor</span></div>
+      </section>
+      <section class="card" id="cardHrv" aria-label="HRV nocturna">
+        <div class="row between"><h2>HRV nocturna</h2><span class="num" style="font-size:22px" id="hrvNow"></span></div>
+        <div class="chart" id="chHrv"></div>
+        <div class="legend"><span><i style="background:var(--band);height:10px"></i>Tu rango normal</span><span><i style="background:var(--accent)"></i>Media 7 días</span><span><i style="background:#4d6573;height:2px"></i>Cada noche</span></div>
+      </section>
+      <div class="grid2">
+        <section class="card" id="cardRhr" aria-label="FC en reposo"><div class="row between"><h3>FC en reposo</h3><span class="sub" id="rhrNow"></span></div><div class="chart" id="chRhr"></div></section>
+        <section class="card" id="cardSleep" aria-label="Sueño"><div class="row between"><h3>Horas de sueño</h3><span class="sub" id="sleepNow"></span></div><div class="chart" id="chSleep"></div></section>
+      </div>
+      <section class="card" id="cardBb" aria-label="Body Battery"><div class="row between"><h3>Body Battery</h3><span class="sub" id="bbNow"></span></div><div class="chart" id="chBb"></div></section>
+      <section class="card" id="cardVo2" aria-label="VO2 máx">
+        <div class="row between"><h3>VO2 máx (Garmin)</h3><span class="sub" id="vo2Sub"></span></div>
+        <div class="chart" id="chVo2"></div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>Bici</span><span><i style="background:var(--muted)"></i>Carrera</span></div>
+      </section>
+      <section class="card" aria-label="Forma">
+        <h3>Forma</h3>
+        <div class="metrics">
+          <div class="metric"><span class="eyebrow">FTP</span><span class="num" id="ftpNow">—</span><span class="sub" id="ftpNext"></span></div>
+          <div class="metric"><span class="eyebrow">VO2 máx bici</span><span class="num" id="vo2Now">—</span><span class="sub" id="vo2Delta"></span></div>
+          <div class="metric"><span class="eyebrow">Tests FTP</span><span class="num" id="ftpTests">0/2</span><span class="sub">1 dic y 9 feb</span></div>
+        </div>
+      </section>
     </div>
   </section>
 
   <!-- FUERZA -->
-  <section id="v-fuerza" class="wrap" hidden style="gap:16px">
-    <div class="card">
-      <h2>Generar sesión de fuerza</h2>
-      <div class="row">
-        <div class="seg" id="placeSeg"><button data-p="casa" aria-pressed="true">Casa</button><button data-p="gym">Gimnasio</button></div>
-        <div class="seg" id="durSeg"><button data-d="25">25′</button><button data-d="40" aria-pressed="true">40′</button><button data-d="55">55′</button></div>
-        <div class="seg" id="typeSeg"><button data-t="normal" aria-pressed="true">Normal</button><button data-t="descarga">Descarga</button></div>
+  <section id="v-fuerza" class="view" hidden>
+    <div style="display:flex;flex-direction:column;gap:14px;max-width:720px">
+      <div class="row" style="gap:8px">
+        <div class="seg" id="placeSeg" role="group" aria-label="Lugar"><button data-p="casa" aria-pressed="true">Casa</button><button data-p="gym">Gimnasio</button></div>
+        <div class="seg" id="durSeg" role="group" aria-label="Duración"><button data-d="25">25′</button><button data-d="40" aria-pressed="true">40′</button><button data-d="55">55′</button></div>
+        <div class="seg" id="typeSeg" role="group" aria-label="Tipo de semana"><button data-t="normal" aria-pressed="true">Normal</button><button data-t="descarga">Descarga</button></div>
       </div>
-      <div>
-        <div class="eyebrow" style="margin-bottom:6px">Material disponible</div>
-        <div class="kit" id="kit"></div>
-      </div>
-      <div class="row"><button class="btn" id="genBtn">Generar</button><span class="sub" id="genNote"></span></div>
+      <section class="card" id="workout" aria-label="Entreno de fuerza"></section>
     </div>
-    <div class="card" id="workout"></div>
   </section>
 
   <!-- INFORMES -->
-  <section id="v-informes" class="wrap" hidden style="gap:16px">
-    <div class="card">
-      <div class="row" style="justify-content:space-between"><h2>Informes del domingo</h2></div>
-      <div class="rlist" id="rlist"></div>
+  <section id="v-informes" class="view" hidden>
+    <div style="display:flex;flex-direction:column;gap:14px;max-width:720px">
+      <section class="card"><h2>Informes del domingo</h2><div class="rlist" id="rlist"></div></section>
+      <section class="card report" id="report"></section>
     </div>
-    <div class="card report" id="report"></div>
   </section>
 </div>
 
-<nav class="tabs" role="tablist" id="tabs" hidden>
-  <div class="inner">
-    <button class="tab" role="tab" data-v="hoy" aria-selected="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Hoy</button>
-    <button class="tab" role="tab" data-v="progreso"><svg viewBox="0 0 24 24"><path d="M4 18l5-6 4 3 7-9"/></svg>Progreso</button>
-    <button class="tab" role="tab" data-v="fuerza"><svg viewBox="0 0 24 24"><path d="M3 10v4M6 8v8M18 8v8M21 10v4M6 12h12"/></svg>Fuerza</button>
-    <button class="tab" role="tab" data-v="informes"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h6"/></svg>Informes</button>
+<nav class="tabs" id="tabs" hidden aria-label="Secciones">
+  <div class="inner" role="tablist">
+    <span class="brand">SportAgents</span>
+    <button class="tab" role="tab" data-v="hoy" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Hoy</button>
+    <button class="tab" role="tab" data-v="progreso"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l5-6 4 3 7-9"/></svg>Progreso</button>
+    <button class="tab" role="tab" data-v="fuerza"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/></svg>Fuerza</button>
+    <button class="tab" role="tab" data-v="informes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/></svg>Informes</button>
   </div>
 </nav>
 
+<dialog class="sheet" id="guide" aria-label="Guía del ejercicio"><div class="sheet-in" id="guideIn"></div></dialog>
+<dialog class="full" id="trainer" aria-label="Modo entreno"><div class="full-in" id="trainerIn"></div></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="guides.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
