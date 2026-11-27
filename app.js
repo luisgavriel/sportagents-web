@@ -107,11 +107,54 @@ function intensity(s){
   if(t.kind==="heart_rate")return ((t.low+t.high)/2)/170;
   return s.type==="interval"?0.7:s.type==="recovery"?0.5:0.4;
 }
+// Bloques con su contexto (repetición n de N) para el tooltip
+function flatCtx(steps,rep){const out=[];(steps||[]).forEach(s=>{if(s.type==="repeat")for(let i=0;i<(s.count||1);i++)out.push(...flatCtx(s.steps,{n:i+1,of:s.count||1}));else out.push({...s,rep})});return out}
+const ZONES=[[55,"Z1","Recuperación",[85,95]],[75,"Z2","Resistencia",[85,95]],[90,"Z3","Tempo",[85,95]],[105,"Z4","Umbral",[90,100]],[120,"Z5","VO2 máx",[95,105]],[999,"Z6","Anaeróbico",[100,110]]];
+function zoneOf(pct){return ZONES.find(z=>pct<=z[0])}
+const cleanNote=n=>String(n||"").replace(/,?\s*sin erg\b/ig,"").trim();
+function blockInfo(s,i,n,t0){
+  const t=s.target||{}, rows=[];
+  const title=(STEP_LABEL[s.type]||(s.type==="interval"?"Bloque":"Paso"))+(s.rep?` · rep. ${s.rep.n} de ${s.rep.of}`:"");
+  const dur=s.duration_min?`${s.duration_min}′`:s.distance_km?`${nf(s.distance_km,1)} km`:"";
+  rows.push(["Tiempo",`${dur}${s.duration_min?` · min ${Math.round(t0)}–${Math.round(t0+s.duration_min)}`:""}`]);
+  let pulse=null;
+  if(t.kind==="power_pct_ftp"){
+    const w=t.watts_pedals||(t.low!=null?[Math.round(t.low*FTP/100),Math.round(t.high*FTP/100)]:null);
+    const pct=t.low!=null?[t.low,t.high]:w?[Math.round(w[0]/FTP*100),Math.round(w[1]/FTP*100)]:null;
+    if(w)rows.push(["Vatios",`<b>${w[0]}–${w[1]} W</b>`]);
+    if(pct){const z=zoneOf((pct[0]+pct[1])/2);rows.push(["Zona",`${z[1]} ${z[2]} · ${pct[0]}–${pct[1]} % FTP`]);rows.push(["Cadencia",`${z[3][0]}–${z[3][1]} rpm (orientativa)`])}
+  }else if(t.kind==="heart_rate"){pulse=`${t.low}–${t.high} ppm`}
+  const note=cleanNote(s.note), m=note.match(/pulso\s*([<>]?\s*\d+(?:\s*[–-]\s*\d+)?)/i);
+  if(!pulse&&m)pulse=m[1].replace(/\s+/g,"")+" ppm";
+  if(pulse)rows.push(["Pulso",pulse]);
+  const rest=m?note.replace(m[0],"").replace(/^[;,\s]+|[;,\s]+$/g,""):note;
+  if(rest)rows.push(["Nota",esc(rest)]);
+  return `<div class="bt-h">${title} <span class="sub">${i+1}/${n}</span></div>`+rows.map(r=>`<div class="bt-r"><span>${r[0]}</span><span>${r[1]}</span></div>`).join("");
+}
 function ibar(raw){
-  const st=flatSteps(raw).map(s=>({min:s.duration_min||(s.distance_km?s.distance_km*6:1),i:intensity(s)}));
+  const fs=flatCtx(raw), st=fs.map(s=>({min:s.duration_min||(s.distance_km?s.distance_km*6:1),i:intensity(s)}));
   if(st.length<2)return "";
   const tot=st.reduce((a,s)=>a+s.min,0);
-  return `<div class="ibar" role="img" aria-label="Intensidad de la sesión por bloques, ${Math.round(tot)} minutos">${st.map(s=>{const h=Math.max(12,Math.min(100,s.i/1.15*100));const c=s.i>=0.88?"hi":s.i>=0.7?"mid":"lo";return `<div class="${c}" style="flex:${s.min};height:${h.toFixed(0)}%"></div>`}).join("")}</div>`;
+  let t0=0;const tips=fs.map((s,i)=>{const h=blockInfo(s,i,fs.length,t0);t0+=st[i].min;return h});
+  const id="ib"+(++ibN);IBT[id]=tips;
+  return `<div class="ibar" id="${id}" role="img" aria-label="Intensidad de la sesión por bloques, ${Math.round(tot)} minutos. Pasa el ratón o toca un bloque para ver sus datos">${st.map((s,i)=>{const h=Math.max(12,Math.min(100,s.i/1.15*100));const c=s.i>=0.88?"hi":s.i>=0.7?"mid":"lo";return `<div class="${c}" data-b="${i}" style="flex:${s.min};height:${h.toFixed(0)}%"></div>`}).join("")}<div class="btip" hidden></div></div>`;
+}
+let ibN=0;const IBT={};
+function wireIbars(root){
+  root.querySelectorAll(".ibar").forEach(bar=>{
+    const tip=bar.querySelector(".btip"), tips=IBT[bar.id]; if(!tips)return;
+    let cur=null;
+    const showB=el=>{
+      bar.querySelectorAll("[data-b]").forEach(b=>b.classList.toggle("on",b===el));
+      if(!el){tip.hidden=true;cur=null;return}
+      cur=el;tip.innerHTML=tips[+el.dataset.b];tip.hidden=false;
+      const bw=bar.clientWidth, cx=el.offsetLeft+el.offsetWidth/2, tw=tip.offsetWidth;
+      tip.style.left=Math.max(0,Math.min(bw-tw,cx-tw/2))+"px";
+    };
+    bar.onpointermove=e=>{if(e.pointerType==="mouse"){const el=e.target.closest("[data-b]");if(el&&el!==cur)showB(el)}};
+    bar.onpointerleave=e=>{if(e.pointerType==="mouse")showB(null)};
+    bar.onclick=e=>{const el=e.target.closest("[data-b]");showB(el&&el!==cur?el:null)};
+  });
 }
 function renderHoy(){
   renderRecovery();
@@ -126,6 +169,7 @@ function renderHoy(){
         ${s.sport==="strength"?`<div class="row" style="gap:8px"><span class="sub" style="flex-basis:100%">¿Dónde entrenas?</span><button class="btn" data-go="casa">En casa</button><button class="btn ghost" data-go="gym">En el gimnasio</button></div>`:""}
         ${(s.desc||s.steps.length)?`<details><summary>${s.steps.length?"Ver los pasos":"Ver la descripción"}</summary>${s.desc?`<p class="sub" style="margin:8px 0 0">${esc(s.desc)}</p>`:""}${s.steps.length?`<ol class="steps">${s.steps.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>`:""}</details>`:""}
       </div>`).join(""):`<div class="sub">Descanso. Si te apetece, paseo o movilidad suave.</div>`);
+  wireIbars($("sessionsCard"));
   $("sessionsCard").querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{state.place=b.dataset.go;state.pick={};syncSeg();generate();show("fuerza")});
   renderWeight();
 }
@@ -683,7 +727,7 @@ function stepText(st){
   let tgt="";
   if(t.kind==="power_pct_ftp"&&t.watts_pedals)tgt=`a ${t.watts_pedals[0]}–${t.watts_pedals[1]} W`;
   else if(t.kind==="heart_rate")tgt=`a ${t.low}–${t.high} ppm`;
-  return [STEP_LABEL[st.type]||"",`${st.duration_min}′`,tgt,st.note?`(${st.note})`:""].filter(Boolean).join(" ").replace(/^./,c=>c.toUpperCase());
+  return [STEP_LABEL[st.type]||"",`${st.duration_min}′`,tgt,cleanNote(st.note)?`(${cleanNote(st.note)})`:""].filter(Boolean).join(" ").replace(/^./,c=>c.toUpperCase());
 }
 function mapSession(row){
   const d=row.data||{};
