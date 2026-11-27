@@ -27,12 +27,25 @@ function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTim
 
 // ---- Selector de día
 const todayISO=()=>new Date().toLocaleDateString("sv-SE",{timeZone:"Europe/Berlin"});
+function dayOpt(d){const t=todayISO();return `<option value="${d}">${d===t?"Hoy, ":""}${fmtD(d)}</option>`}
 function setupDays(){
   const t=todayISO(), ds=[];
-  for(let i=-3;i<=10;i++){const d=new Date(t+"T12:00:00");d.setDate(d.getDate()+i);ds.push(d.toLocaleDateString("sv-SE"))}
-  $("daySel").innerHTML=ds.map(d=>`<option value="${d}">${d===t?"Hoy, ":""}${fmtD(d)}</option>`).join("");
+  for(let i=-3;i<=10;i++)ds.push(addD(t,i));
+  $("daySel").innerHTML=ds.map(dayOpt).join("");
   $("daySel").value=t;
   $("daySel").onchange=()=>{renderHoy();renderWeek();setEyebrow();generate()};
+  $("dayPrev").innerHTML=svgI(IC.chev).replace("<svg",'<svg style="transform:rotate(180deg)"');$("dayNext").innerHTML=svgI(IC.chev);
+  $("dayPrev").onclick=()=>setDay(addD($("daySel").value,-1));
+  $("dayNext").onclick=()=>setDay(addD($("daySel").value,1));
+}
+// Cambia el día mostrado; si no está en el selector, lo añade en su sitio
+function setDay(d){
+  const sel=$("daySel");
+  if(![...sel.options].some(o=>o.value===d)){
+    const after=[...sel.options].find(o=>o.value>d);
+    after?after.insertAdjacentHTML("beforebegin",dayOpt(d)):sel.insertAdjacentHTML("beforeend",dayOpt(d));
+  }
+  sel.value=d;sel.onchange();
 }
 function planWeek(d){
   const ds=Object.keys(P).sort(); if(!ds.length)return "";
@@ -156,9 +169,16 @@ function wireIbars(root){
     bar.onclick=e=>{const el=e.target.closest("[data-b]");showB(el&&el!==cur?el:null)};
   });
 }
+let next7Open=false;
+function next7(d){
+  let rows="";
+  for(let i=1;i<=7;i++){const iso=addD(d,i), ss=P[iso]||[];
+    rows+=`<button class="nd" data-nd="${iso}"><span class="nd-d">${fmtD(iso)}</span><span class="nd-s">${ss.length?ss.map(s=>`<span class="nd-i">${svgI(IC[s.sport]||IC.bike)}${esc(s.name)}</span>`).join(""):'<span class="sub">Descanso</span>'}</span><span class="nd-m">${ss.length?ss.reduce((a,s)=>a+s.min,0)+"′":""}</span></button>`}
+  return `<details class="next7" id="next7"${next7Open?" open":""}><summary>Próximos 7 días</summary><div class="nd-list">${rows}</div></details>`;
+}
 function renderHoy(){
   renderRecovery();
-  const d=$("daySel").value, ss=P[d]||[];
+  const d=$("daySel").value, ss=P[d]||[], past=d<todayISO(), doneH=past?dayLines(d,dayInfo(d)):"";
   $("sessionsCard").innerHTML=`<div class="row between"><h2>${d===todayISO()?"Entreno de hoy":"Entreno · "+fmtD(d)}</h2>${ss.length>1?`<span class="sub">${ss.reduce((a,s)=>a+s.min,0)} min en total</span>`:""}</div>`+
     (ss.length?ss.map(s=>`
       <div class="ses">
@@ -168,8 +188,10 @@ function renderHoy(){
         ${s.sport!=="strength"?ibar(s.rawSteps):""}
         ${s.sport==="strength"?`<div class="row" style="gap:8px"><span class="sub" style="flex-basis:100%">¿Dónde entrenas?</span><button class="btn" data-go="casa">En casa</button><button class="btn ghost" data-go="gym">En el gimnasio</button></div>`:""}
         ${(s.desc||s.steps.length)?`<details><summary>${s.steps.length?"Ver los pasos":"Ver la descripción"}</summary>${s.desc?`<p class="sub" style="margin:8px 0 0">${esc(s.desc)}</p>`:""}${s.steps.length?`<ol class="steps">${s.steps.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>`:""}</details>`:""}
-      </div>`).join(""):`<div class="sub">Descanso. Si te apetece, paseo o movilidad suave.</div>`);
+      </div>`).join(""):(past&&doneH?"":`<div class="sub">Descanso. Si te apetece, paseo o movilidad suave.</div>`))+
+    (past&&doneH?`<div class="dayd"><span class="eyebrow">${ss.length?"Cómo fue":"Lo que hiciste"}</span>${doneH}</div>`:"")+next7(d);
   wireIbars($("sessionsCard"));
+  const n7=$("next7");if(n7){n7.ontoggle=()=>{next7Open=n7.open};n7.querySelectorAll("[data-nd]").forEach(b=>b.onclick=()=>setDay(b.dataset.nd))}
   $("sessionsCard").querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{state.place=b.dataset.go;state.pick={};syncSeg();generate();show("fuerza")});
   renderWeight();
 }
@@ -296,7 +318,9 @@ function renderWeek(){
   if($("calNow"))$("calNow").onclick=()=>{cal.start=mondayOf(t);cal.month=t.slice(0,7);cal.sel=null;renderWeek()};
   el.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{cal.mode=b.dataset.m;
     const ref=cal.sel||(cal.mode==="month"?cal.start:sel);cal.month=ref.slice(0,7);if(cal.mode==="week")cal.start=mondayOf(cal.sel||(cal.month===sel.slice(0,7)?sel:cal.month+"-01"));renderWeek()});
-  el.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{cal.sel=cal.sel===b.dataset.d?null:b.dataset.d;renderWeek()});
+  el.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{const iso=b.dataset.d, keep={start:cal.start,month:cal.month};
+    setDay(iso);Object.assign(cal,keep,{sel:iso});renderWeek();
+    if($("sessionsCard").getBoundingClientRect().top<0||$("weekCard").getBoundingClientRect().top>$("sessionsCard").getBoundingClientRect().bottom)$("sessionsCard").scrollIntoView({behavior:"smooth",block:"start"})});
   if($("calGo"))$("calGo").onclick=()=>{const ds=$("daySel");ds.value=cal.sel;ds.onchange();window.scrollTo({top:0,behavior:"smooth"})};
 }
 
@@ -699,7 +723,7 @@ function show(v){
   ["hoy","progreso","fuerza","informes"].forEach(x=>{const s=$("v-"+x);s.hidden=x!==v;if(x===v){s.classList.remove("view");void s.offsetWidth;s.classList.add("view")}});
   document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",t.dataset.v===v));
   $("viewTitle").textContent=TITLES[v];
-  $("dayBox").style.visibility=v==="hoy"||v==="fuerza"?"visible":"hidden";
+  $("dayBox").style.display=v==="hoy"||v==="fuerza"?"":"none";
   setEyebrow();
   if(v==="progreso")renderProgreso();
   window.scrollTo({top:0});

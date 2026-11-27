@@ -2,7 +2,7 @@
 // - Archivos de la app: primero la red; supabase-js y fuentes: primero la caché.
 // - Lecturas de Supabase (GET /rest/v1/...): primero la red; sin conexión, la última respuesta guardada.
 // Escrituras (guardar fuerza) y el login siempre van a la red.
-const VERSION = "v9";
+const VERSION = "v10";
 const SHELL = `shell-${VERSION}`, DATA = "data-v1";
 const FILES = ["./", "index.html", "app.js", "guides.js", "figures.js", "style.css", "manifest.webmanifest", "icons/icon-192.png"];
 const CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
