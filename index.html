@@ -69,6 +69,15 @@
         <div class="chart" id="chWeight"></div>
         <div class="legend"><span><i style="background:var(--accent)"></i>Pesadas</span><span><i style="background:var(--muted);height:2px"></i>Línea objetivo 71,4 → 67 kg</span><span>Toca el gráfico para ver el valor</span></div>
       </section>
+      <section class="card" id="cardLoad" aria-label="Estado de forma">
+        <div class="row between"><h2>Estado de forma</h2><span class="sub">Con la carga de Garmin</span></div>
+        <div class="row" id="loadStats" style="gap:10px;align-items:stretch"></div>
+        <div class="chart" id="chLoad"></div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>Forma (42 días)</span><span><i style="background:var(--warn)"></i>Fatiga (7 días)</span><span><i style="background:var(--muted);height:2px"></i>Discontinua: previsión con el plan</span></div>
+        <h3 style="margin-top:4px">Frescura</h3>
+        <div class="chart" id="chTsb"></div>
+        <div class="legend"><span><i style="background:var(--ok-soft);height:10px"></i>Entrenamiento productivo (−10 a −30)</span><span><i style="background:var(--bad-soft);height:10px"></i>Sobrecarga (menos de −30)</span></div>
+      </section>
       <section class="card" id="cardHrv" aria-label="HRV nocturna">
         <div class="row between"><h2>HRV nocturna</h2><span class="num" style="font-size:22px" id="hrvNow"></span></div>
         <div class="chart" id="chHrv"></div>
@@ -127,6 +136,7 @@
 </nav>
 
 <dialog class="sheet" id="guide" aria-label="Guía del ejercicio"><div class="sheet-in" id="guideIn"></div></dialog>
+<dialog class="full" id="zoom" aria-label="Gráfico ampliado"><div class="full-in zoom-in" id="zoomIn"></div></dialog>
 <dialog class="full" id="trainer" aria-label="Modo entreno"><div class="full-in" id="trainerIn"></div></dialog>
 <div class="toast" id="toast" role="status" hidden></div>
 

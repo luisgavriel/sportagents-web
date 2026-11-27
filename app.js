@@ -19,7 +19,8 @@ const IC={
   video:'<rect x="2" y="5" width="20" height="14" rx="4"/><path d="M10 9l5 3-5 3z" fill="currentColor"/>',
   bike:'<circle cx="5.5" cy="17" r="3.5"/><circle cx="18.5" cy="17" r="3.5"/><path d="M5.5 17L9 9h6l3.5 8M9 9L7.5 6H5M12 17l3-8"/>',
   run:'<circle cx="14" cy="4.5" r="2"/><path d="M5 21l3.5-6 3 2.5V22M8.5 15l1.5-6 4 2 2.5 3h3.5M10 9l-3.5 1L5 13"/>',
-  strength:'<path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/>'
+  strength:'<path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/>',
+  zoom:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'
 };
 const triSvg=c=>`<svg class="tri" viewBox="0 0 24 24" role="img" aria-label="por debajo de lo normal"><path d="M12 3L22 20H2Z" fill="var(--${c})"/></svg>`;
 function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,3500)}
@@ -256,13 +257,18 @@ function renderWeek(){
 }
 
 // ---- Gráficos SVG con valor al tocar
-function lineChart(el,{series,band,yMin,yMax,x0,x1,h=200,yTicks,unit="",xTicks,tip,label}){
+let clipN=0;
+function lineChart(el,opts){
+  const {series,band,bands,yMin,yMax,x0,x1,h=200,yTicks,unit="",xTicks,tip,label,xFmt,zoom=true}=opts;
   const W_=Math.max(260,Math.round(el.clientWidth||640)),H=Math.round(h*Math.max(0.75,Math.min(1,W_/640))),m={l:30,r:10,t:12,b:22};
   const X=t=>m.l+(t-x0)/((x1-x0)||1)*(W_-m.l-m.r), Y=v=>m.t+(1-(v-yMin)/(yMax-yMin))*(H-m.t-m.b);
-  let s=`<svg viewBox="0 0 ${W_} ${H}" role="img" aria-label="${esc(label||"")}">`;
+  const cid="clip"+(++clipN);
+  let s=`<svg viewBox="0 0 ${W_} ${H}" role="img" aria-label="${esc(label||"")}"><defs><clipPath id="${cid}"><rect x="${m.l}" y="0" width="${W_-m.l-m.r+6}" height="${H-m.b+2}"/></clipPath></defs>`;
+  (bands||[]).forEach(b=>{const a=Y(Math.min(yMax,b[1])),z=Y(Math.max(yMin,b[0]));if(z>a)s+=`<rect x="${m.l}" y="${a}" width="${W_-m.l-m.r}" height="${z-a}" fill="${b[2]}"/>`});
   if(band)s+=`<rect x="${m.l}" y="${Y(band[1])}" width="${W_-m.l-m.r}" height="${Math.max(0,Y(band[0])-Y(band[1]))}" fill="var(--band)"/>`;
   yTicks.forEach(v=>{s+=`<line x1="${m.l}" x2="${W_-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#1d2933"/><text x="${m.l-6}" y="${Y(v)+4}" text-anchor="end">${v}</text>`});
-  (xTicks||[]).forEach(t=>{s+=`<text x="${X(ts(t))}" y="${H-6}" text-anchor="middle">${MON[new Date(t+"T12:00:00").getMonth()]}</text>`});
+  (xTicks||[]).forEach(t=>{s+=`<text x="${X(ts(t))}" y="${H-6}" text-anchor="middle">${xFmt?xFmt(t):MON[new Date(t+"T12:00:00").getMonth()]}</text>`});
+  s+=`<g clip-path="url(#${cid})">`;
   series.forEach(se=>{
     let d="",pen=false;
     se.pts.forEach(([t,v])=>{if(v==null){pen=false;return}d+=(pen?"L":"M")+X(ts(t)).toFixed(1)+" "+Y(v).toFixed(1);pen=true});
@@ -270,10 +276,12 @@ function lineChart(el,{series,band,yMin,yMax,x0,x1,h=200,yTicks,unit="",xTicks,t
     if(se.dots)se.pts.forEach(([t,v])=>{if(v!=null)s+=`<circle cx="${X(ts(t))}" cy="${Y(v)}" r="${se.r||3}" fill="${se.color}"/>`});
     if(se.end){const p=se.pts.filter(p=>p[1]!=null).at(-1);if(p)s+=`<circle cx="${X(ts(p[0]))}" cy="${Y(p[1])}" r="5" fill="${se.color}" stroke="var(--surface)" stroke-width="2"/>`}
   });
+  s+=`</g>`;
   s+=`<line class="cursor" x1="0" x2="0" y1="${m.t}" y2="${H-m.b}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/><circle class="cdot" r="5" fill="var(--fg)" visibility="hidden"/></svg><div class="tip" hidden></div>`;
   el.innerHTML=s;
+  if(zoom){el._args=opts;const zb=document.createElement("button");zb.className="zbtn";zb.setAttribute("aria-label","Ampliar: "+(label||"gráfico"));zb.innerHTML=svgI(IC.zoom);zb.onclick=ev=>{ev.stopPropagation();openZoom(el._args)};zb.onpointerdown=ev=>ev.stopPropagation();el.appendChild(zb)}
   if(!tip)return;
-  const pts=tip.pts.filter(p=>p[1]!=null); if(!pts.length)return;
+  const pts=tip.pts.filter(p=>p[1]!=null&&ts(p[0])>=x0-DAY/2&&ts(p[0])<=x1+DAY/2); if(!pts.length)return;
   const svg=el.querySelector("svg"),tp=el.querySelector(".tip"),cur=svg.querySelector(".cursor"),dot=svg.querySelector(".cdot");
   const move=e=>{
     const r=svg.getBoundingClientRect(), sx=(e.clientX-r.left)/r.width*W_;
@@ -302,17 +310,18 @@ function renderProgreso(){
   {const [lo,hi]=span(2,3);const yMin=Math.min(lo,BASE.low-5),yMax=Math.max(hi,BASE.high+5);
    $("hrvNow").innerHTML=`${nf(last(2),0)}<span class="unit">ms</span>`;
    lineChart($("chHrv"),{x0,x1,yMin,yMax,yTicks:[BASE.low,BASE.high],band:[BASE.low,BASE.high],xTicks:xt,label:"HRV nocturna",
-    series:[{pts:sub.map(r=>[r[0],r[2]]),color:thin,w:1.2},{pts:mm(2),color:"var(--accent)",w:3,end:true}],tip:{pts:sub.map(r=>[r[0],r[2]]),unit:" ms"}});}
+    series:[{pts:G.map(r=>[r[0],r[2]]),color:thin,w:1.2},{pts:ma7(2),color:"var(--accent)",w:3,end:true}],tip:{pts:G.map(r=>[r[0],r[2]]),unit:" ms"}});}
   {const [lo,hi]=span(1,2);$("rhrNow").textContent=`${nf(last(1),0)} ppm`;
    lineChart($("chRhr"),{x0,x1,yMin:lo,yMax:hi,yTicks:ticks(lo,hi),h:170,xTicks:xt,label:"FC en reposo",
-    series:[{pts:sub.map(r=>[r[0],r[1]]),color:thin,w:1.2},{pts:mm(1),color:"var(--accent)",w:2.6,end:true}],tip:{pts:sub.map(r=>[r[0],r[1]]),unit:" ppm"}});}
+    series:[{pts:G.map(r=>[r[0],r[1]]),color:thin,w:1.2},{pts:ma7(1),color:"var(--accent)",w:2.6,end:true}],tip:{pts:G.map(r=>[r[0],r[1]]),unit:" ppm"}});}
   {$("sleepNow").textContent=`${nf(last(6),1)} h`;
    lineChart($("chSleep"),{x0,x1,yMin:3,yMax:10,yTicks:[4,7,10],h:170,xTicks:xt,label:"Horas de sueño",
-    series:[{pts:sub.map(r=>[r[0],r[6]]),color:thin,w:1.2},{pts:mm(6),color:"var(--accent)",w:2.6,end:true}],tip:{pts:sub.map(r=>[r[0],r[6]]),unit:" h",dec:1}});}
+    series:[{pts:G.map(r=>[r[0],r[6]]),color:thin,w:1.2},{pts:ma7(6),color:"var(--accent)",w:2.6,end:true}],tip:{pts:G.map(r=>[r[0],r[6]]),unit:" h",dec:1}});}
   {$("bbNow").textContent=`${nf(last(7),0)}`;
    lineChart($("chBb"),{x0,x1,yMin:0,yMax:100,yTicks:[0,50,100],h:150,xTicks:xt,label:"Body Battery máximo",
-    series:[{pts:sub.map(r=>[r[0],r[7]]),color:thin,w:1.2},{pts:mm(7),color:"var(--accent)",w:2.6,end:true}],tip:{pts:sub.map(r=>[r[0],r[7]])}});}
+    series:[{pts:G.map(r=>[r[0],r[7]]),color:thin,w:1.2},{pts:ma7(7),color:"var(--accent)",w:2.6,end:true}],tip:{pts:G.map(r=>[r[0],r[7]])}});}
   renderWeightChart(x0);
+  renderLoad(x0,xt);
   renderVo2(sub,x0,x1,xt);
 }
 function renderWeightChart(x0p){
@@ -346,6 +355,90 @@ function goChart(card){
   show("progreso");
   requestAnimationFrame(()=>{const el=$(card);if(!el)return;el.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
     el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash")});
+}
+
+// ---- Zoom: el gráfico a pantalla completa con una barra para elegir el tramo de fechas
+const DAY=864e5;
+function dayTicks(x0,x1){
+  const d=Math.round((x1-x0)/DAY), out=[];
+  if(d>75){const t=new Date(x0);t.setDate(1);for(let k=0;k<30;k++){t.setMonth(t.getMonth()+1);const iso=isoOf(t);if(ts(iso)>x1)break;out.push(iso)}return {ticks:out,fmt:null}}
+  const step=d<=14?2:d<=35?7:14;
+  for(let t=x0+DAY;t<x1;t+=step*DAY)out.push(isoOf(new Date(t)));
+  return {ticks:out,fmt:t=>{const x=new Date(t+"T12:00:00");return `${x.getDate()} ${MON[x.getMonth()]}`}};
+}
+function openZoom(args){
+  const all=args.series.flatMap(s=>s.pts).filter(p=>p[1]!=null).map(p=>ts(p[0]));
+  const lo=Math.min(args.x0,...all), hi=Math.max(args.x1,...all), n=Math.max(1,Math.round((hi-lo)/DAY));
+  let a=Math.round((args.x0-lo)/DAY), b=Math.round((args.x1-lo)/DAY);
+  const dlg=$("zoom");
+  $("zoomIn").innerHTML=`<div class="row between" style="flex-wrap:nowrap"><div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span class="eyebrow">Gráfico ampliado</span><h2>${esc(args.label||"")}</h2></div>
+      <button class="icon-btn" id="zoomClose" aria-label="Cerrar">${svgI(IC.close)}</button></div>
+    <div class="chart" id="zBig"></div>
+    <div class="zrange"><span id="zFrom"></span><span id="zDays" class="sub"></span><span id="zTo"></span></div>
+    <div class="brush"><div class="mini" id="zMini"></div><div class="sel" id="zSel"></div>
+      <input type="range" id="zA" min="0" max="${n}" step="1" aria-label="Desde">
+      <input type="range" id="zB" min="0" max="${n}" step="1" aria-label="Hasta"></div>
+    <div class="seg" role="group" aria-label="Tramo rápido" style="align-self:flex-start"><button data-z="14">14 días</button><button data-z="30">30 días</button><button data-z="90">90 días</button><button data-z="0">Todo</button></div>
+    <span class="sub">Arrastra los extremos de la barra para elegir las fechas. Toca el gráfico para ver cada valor.</span>`;
+  const draw=()=>{
+    const x0=lo+a*DAY, x1=lo+b*DAY, {ticks,fmt}=dayTicks(x0,x1);
+    lineChart($("zBig"),{...args,x0,x1,h:Math.min(420,Math.max(240,innerHeight*0.45)),xTicks:ticks,xFmt:fmt,zoom:false});
+    $("zA").value=a;$("zB").value=b;
+    $("zSel").style.left=(a/n*100)+"%";$("zSel").style.width=((b-a)/n*100)+"%";
+    $("zFrom").textContent=fmtD(isoOf(new Date(x0)));$("zTo").textContent=fmtD(isoOf(new Date(x1)));$("zDays").textContent=`${b-a} días`;
+  };
+  lineChart($("zMini"),{...args,x0:lo,x1:hi,h:64,yTicks:[],xTicks:[],band:null,bands:null,tip:null,zoom:false,series:args.series.map(s=>({...s,dots:false,end:false}))});
+  $("zA").oninput=()=>{a=Math.min(+$("zA").value,b-3);draw()};
+  $("zB").oninput=()=>{b=Math.max(+$("zB").value,a+3);draw()};
+  $("zoomIn").querySelectorAll("[data-z]").forEach(btn=>btn.onclick=()=>{const z=+btn.dataset.z;const end=Math.min(n,Math.round((Math.min(hi,ts(todayISO())+21*DAY)-lo)/DAY));
+    if(!z){a=0;b=n}else{b=Math.max(z,end);a=Math.max(0,b-z)}draw()});
+  $("zoomClose").onclick=()=>dlg.close();
+  if(!dlg.open)dlg.showModal();
+  requestAnimationFrame(draw);
+}
+
+// ---- Estado de forma: forma (media de 42 días), fatiga (7 días) y frescura (forma − fatiga) con la carga de Garmin
+function loadModel(){
+  const acts=Object.values(A).flat().filter(a=>a.training_load!=null);
+  if(!acts.length)return null;
+  const byDay={};acts.forEach(a=>byDay[a.activity_date]=(byDay[a.activity_date]||0)+(+a.training_load));
+  // Carga por minuto de cada deporte (últimos 60 días) para prever las sesiones del plan
+  const lim=addD(todayISO(),-60), rate={}, tot={};
+  acts.filter(a=>a.activity_date>=lim&&a.duration_min).forEach(a=>{const s=SPORT_OF(a.sport);rate[s]=rate[s]||[0,0];rate[s][0]+=+a.training_load;rate[s][1]+=+a.duration_min});
+  const all=Object.values(rate).reduce((x,r)=>[x[0]+r[0],x[1]+r[1]],[0,0]), rOf=s=>rate[s]&&rate[s][1]>30?rate[s][0]/rate[s][1]:all[1]?all[0]/all[1]:1;
+  const start=Object.keys(byDay).sort()[0], t=todayISO(), endF=addD(t,28);
+  let ctl=0,atl=0;const out=[];
+  for(let d=start;d<=endF;d=addD(d,1)){
+    const fut=d>t;
+    const L=fut?(P[d]||[]).reduce((x,s)=>x+s.min*rOf(s.sport),0):(byDay[d]||0);
+    ctl+=(L-ctl)/42;atl+=(L-atl)/7;
+    out.push({d,ctl,atl,tsb:ctl-atl,fut,L});
+  }
+  return out;
+}
+function tsbLabel(v){return v>5?["Descansado","ok"]:v>-10?["Neutro","plain"]:v>-30?["Productivo","ok"]:["Sobrecarga","bad"]}
+function renderLoad(x0,xt){
+  const M=loadModel();
+  if(!M){$("chLoad").innerHTML='<div class="sub">Sin carga de Garmin todavía.</div>';$("chTsb").innerHTML="";$("loadStats").innerHTML="";return}
+  const t=todayISO(), now=M.find(r=>r.d===t)||M.filter(r=>!r.fut).at(-1), wk=M.find(r=>r.d===addD(t,-7));
+  const [lab,cls]=tsbLabel(now.tsb);
+  const delta=wk?now.ctl-wk.ctl:null;
+  $("loadStats").innerHTML=`<div class="stat"><span class="big" style="color:var(--accent)">${nf(now.ctl,0)}</span><span class="sub">Forma${delta!=null?` · ${delta>=0?"+":""}${nf(delta,1)} en 7 días`:""}</span></div>
+    <div class="stat"><span class="big" style="color:var(--warn)">${nf(now.atl,0)}</span><span class="sub">Fatiga</span></div>
+    <div class="stat ${cls==="bad"?"bad":cls==="ok"?"ok":""}"><span class="big">${now.tsb>0?"+":""}${nf(now.tsb,0)}</span><span class="sub">Frescura · ${lab}</span></div>`;
+  const x1=ts(addD(t,28)), xs=Math.max(x0,ts(M[0].d));
+  const past=M.filter(r=>!r.fut||r.d===addD(t,1)), fut=M.filter(r=>r.fut||r.d===t);
+  const vis=M.filter(r=>ts(r.d)>=xs), hi=Math.ceil(Math.max(10,...vis.map(r=>Math.max(r.ctl,r.atl)))/10)*10;
+  const xt2=[...xt];{const d=new Date(xt.length?xt.at(-1)+"T12:00:00":x0);for(let k=0;k<2;k++){d.setMonth(d.getMonth()+1);const iso=isoOf(d);if(ts(iso)<=x1&&!xt2.includes(iso))xt2.push(iso)}}
+  lineChart($("chLoad"),{x0:xs,x1,yMin:0,yMax:hi,yTicks:ticks(0,hi),h:190,xTicks:xt2,label:"Forma y fatiga",
+    series:[{pts:fut.map(r=>[r.d,r.atl]),color:"var(--warn)",w:1.6,dash:"4 4",op:.7},{pts:fut.map(r=>[r.d,r.ctl]),color:"var(--accent)",w:2.2,dash:"4 4",op:.7},
+      {pts:past.map(r=>[r.d,r.atl]),color:"var(--warn)",w:1.8},{pts:past.map(r=>[r.d,r.ctl]),color:"var(--accent)",w:3,end:true}],
+    tip:{pts:M.map(r=>[r.d,r.ctl]),unit:" de forma"}});
+  const tv=vis.map(r=>r.tsb), tlo=Math.floor(Math.min(-35,...tv)/10)*10, thi=Math.ceil(Math.max(15,...tv)/10)*10;
+  lineChart($("chTsb"),{x0:xs,x1,yMin:tlo,yMax:thi,yTicks:[-30,0,thi],h:150,xTicks:xt2,label:"Frescura",
+    bands:[[-30,-10,"var(--ok-soft)"],[tlo,-30,"var(--bad-soft)"]],
+    series:[{pts:[[isoOf(new Date(xs)),0],[addD(t,28),0]],color:"#2a3843",w:1},{pts:fut.map(r=>[r.d,r.tsb]),color:"var(--fg)",w:1.6,dash:"4 4",op:.6},{pts:past.map(r=>[r.d,r.tsb]),color:"var(--fg)",w:2.2,end:true}],
+    tip:{pts:M.map(r=>[r.d,r.tsb]),unit:" de frescura"}});
 }
 
 // ---- Generador de fuerza
@@ -602,7 +695,7 @@ async function loadData(){
   R=rep.data;
   SD={};str.data.forEach(r=>{SD[r.session_date]=(SD[r.session_date]||0)+(r.duration_min||0)});
   A={};ACT_OK=false;
-  try{const act=await sb.from("v_activities").select("activity_date,sport,name,duration_min");
+  try{const act=await sb.from("v_activities").select("activity_date,sport,name,duration_min,training_load");
     if(!act.error){ACT_OK=true;act.data.forEach(a=>(A[a.activity_date]=A[a.activity_date]||[]).push(a))}}catch(e){}
   H={};str.data.forEach(r=>(r.exercises||[]).forEach(e=>{if(e.name&&e.load_kg!=null)H[e.name]={date:r.session_date,load_kg:+e.load_kg,reps_done:e.reps_done,top:!!e.top}}));
   if(ftp.data.length)FTP=ftp.data.at(-1).ftp_watts;
