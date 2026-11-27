@@ -1,6 +1,6 @@
 // SportAgents · web de entrenamientos (modo oscuro)
 // Datos de garmin_daily por día: [fecha, FCreposo, HRV, HRVsemanal, estado, puntSueño, horasSueño, BBmax, VO2bici, minVigorosos, VO2carrera]
-let A={},ACT_OK=false,SD={},H={},G=[],W=[],P={},R=[],BASE={low:55,high:74},FTP=225,sb=null,lastSaved=null;
+let A={},E=[],ACT_OK=false,SD={},H={},G=[],W=[],P={},R=[],BASE={low:55,high:74},FTP=225,sb=null,lastSaved=null;
 const SPORT={bike:"Bici",run:"Carrera",strength:"Fuerza"};
 const DOW=["dom","lun","mar","mié","jue","vie","sáb"];
 const DOWL=["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
@@ -259,8 +259,8 @@ function renderWeek(){
 // ---- Gráficos SVG con valor al tocar
 let clipN=0;
 function lineChart(el,opts){
-  const {series,band,bands,yMin,yMax,x0,x1,h=200,yTicks,unit="",xTicks,tip,label,xFmt,zoom=true}=opts;
-  const W_=Math.max(260,Math.round(el.clientWidth||640)),H=Math.round(h*Math.max(0.75,Math.min(1,W_/640))),m={l:30,r:10,t:12,b:22};
+  const {series,band,bands,yMin,yMax,x0,x1,h=200,yTicks,unit="",xTicks,tip,label,xFmt,zoom=true,ml=30}=opts;
+  const W_=Math.max(260,Math.round(el.clientWidth||640)),H=Math.round(h*Math.max(0.75,Math.min(1,W_/640))),m={l:ml,r:10,t:12,b:22};
   const X=t=>m.l+(t-x0)/((x1-x0)||1)*(W_-m.l-m.r), Y=v=>m.t+(1-(v-yMin)/(yMax-yMin))*(H-m.t-m.b);
   const cid="clip"+(++clipN);
   let s=`<svg viewBox="0 0 ${W_} ${H}" role="img" aria-label="${esc(label||"")}"><defs><clipPath id="${cid}"><rect x="${m.l}" y="0" width="${W_-m.l-m.r+6}" height="${H-m.b+2}"/></clipPath></defs>`;
@@ -322,6 +322,7 @@ function renderProgreso(){
     series:[{pts:G.map(r=>[r[0],r[7]]),color:thin,w:1.2},{pts:ma7(7),color:"var(--accent)",w:2.6,end:true}],tip:{pts:G.map(r=>[r[0],r[7]])}});}
   renderWeightChart(x0);
   renderLoad(x0,xt);
+  renderEndurance(x0,x1,xt);
   renderVo2(sub,x0,x1,xt);
 }
 function renderWeightChart(x0p){
@@ -439,6 +440,26 @@ function renderLoad(x0,xt){
     bands:[[-30,-10,"var(--ok-soft)"],[tlo,-30,"var(--bad-soft)"]],
     series:[{pts:[[isoOf(new Date(xs)),0],[addD(t,28),0]],color:"#2a3843",w:1},{pts:fut.map(r=>[r.d,r.tsb]),color:"var(--fg)",w:1.6,dash:"4 4",op:.6},{pts:past.map(r=>[r.d,r.tsb]),color:"var(--fg)",w:2.2,end:true}],
     tip:{pts:M.map(r=>[r.d,r.tsb]),unit:" de frescura"}});
+}
+// Endurance score de Garmin (vía no oficial, una vez al día)
+const END_LEVELS=[["Intermedio","classificationLowerLimitIntermediate"],["Entrenado","classificationLowerLimitTrained"],["Bien entrenado","classificationLowerLimitWellTrained"],["Experto","classificationLowerLimitExpert"],["Superior","classificationLowerLimitSuperior"],["Élite","classificationLowerLimitElite"]];
+function renderEndurance(x0,x1,xt){
+  const card=$("cardEnd"); if(!card)return;
+  if(!E.length){$("endStats").innerHTML="";$("chEnd").innerHTML='<div class="sub">Todavía no hay datos de Garmin. Se cargan cada mañana.</div>';return}
+  const pts=E.map(r=>[r.calendar_date,r.score]), now=E.at(-1), ago=E.find(r=>r.calendar_date>=addD(now.calendar_date,-28));
+  const raw=[...E].reverse().find(r=>r.raw&&r.raw.classificationLowerLimitTrained)?.raw||{};
+  const lim=END_LEVELS.map(([n,k])=>[n,+raw[k]||null]).filter(l=>l[1]);
+  const next=lim.find(l=>l[1]>now.score);
+  const d=ago&&ago!==now?now.score-ago.score:null;
+  $("endStats").innerHTML=`<div class="stat"><span class="big" style="color:var(--accent)">${nf(now.score,0)}</span><span class="sub">${now.classification||"Endurance score"}${d!=null?` · ${d>=0?"+":""}${nf(d,0)} en 4 semanas`:""}</span></div>`+
+    (next?`<div class="stat"><span class="big">${nf(next[1]-now.score,0)}</span><span class="sub">para «${next[0]}» (${nf(next[1],0)})</span></div>`:"");
+  const vis=pts.filter(p=>ts(p[0])>=x0).map(p=>p[1]), all=vis.length?vis:pts.map(p=>p[1]);
+  let lo=Math.min(...all), hi=Math.max(...all);
+  const near=lim.filter(l=>l[1]>=lo-800&&l[1]<=hi+800).map(l=>l[1]);
+  lo=Math.floor((Math.min(lo,...near)-200)/100)*100; hi=Math.ceil((Math.max(hi,...near)+200)/100)*100;
+  lineChart($("chEnd"),{x0:Math.max(x0,ts(pts[0][0])),x1,yMin:lo,yMax:hi,yTicks:near.length?near:ticks(lo,hi),h:170,ml:40,xTicks:xt,label:"Endurance score",
+    series:[{pts,color:"var(--accent)",w:2.6,end:true}],tip:{pts}});
+  $("endLegend").innerHTML=lim.length?`<span>Líneas horizontales: niveles de Garmin (${lim.filter(l=>near.includes(l[1])).map(l=>`${l[0]} ${nf(l[1],0)}`).join(" · ")})</span>`:"";
 }
 
 // ---- Generador de fuerza
@@ -697,6 +718,7 @@ async function loadData(){
   A={};ACT_OK=false;
   try{const act=await sb.from("v_activities").select("activity_date,sport,name,duration_min,training_load");
     if(!act.error){ACT_OK=true;act.data.forEach(a=>(A[a.activity_date]=A[a.activity_date]||[]).push(a))}}catch(e){}
+  E=[];try{const en=await sb.from("v_endurance").select("calendar_date,score,classification,raw").order("calendar_date");if(!en.error)E=en.data}catch(e){}
   H={};str.data.forEach(r=>(r.exercises||[]).forEach(e=>{if(e.name&&e.load_kg!=null)H[e.name]={date:r.session_date,load_kg:+e.load_kg,reps_done:e.reps_done,top:!!e.top}}));
   if(ftp.data.length)FTP=ftp.data.at(-1).ftp_watts;
   $("ftpNow").innerHTML=`${FTP}<span class="unit">W</span>`;
